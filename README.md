@@ -26,59 +26,6 @@ SD-PLC compiles IEC 61131-3 Structured Text programs through LLVM to produce nat
 | Raspberry Pi 4 | ARMv8-A (Cortex-A72) | Tier 1 |
 | Nuvoton NUC980 | ARMv5TE (ARM926EJ-S) | Tier 2 |
 
-## Prerequisites
-
-### Rust Toolchain
-
-Install via [rustup](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-### LLVM 17
-
-The `inkwell` crate requires LLVM 17 development libraries.
-
-**Ubuntu / Debian:**
-
-```bash
-wget https://apt.llvm.org/llvm.sh
-chmod +x llvm.sh
-sudo ./llvm.sh 17
-sudo apt install llvm-17-dev libpolly-17-dev
-```
-
-**macOS (Homebrew):**
-
-```bash
-brew install llvm@17
-```
-
-**Windows:**
-
-The project looks for LLVM 17 at the path configured in `.cargo/config.toml`. Update the path if your installation differs:
-
-```toml
-# .cargo/config.toml
-[env]
-LLVM_SYS_170_PREFIX = "C:\\Users\\kajwa\\Development\\llvm-install"
-```
-
-## Building
-
-```bash
-cargo build
-```
-
-## Running
-
-The binary currently runs the lexer against a sample Conveyor Control program and prints the token table:
-
-```bash
-cargo run
-```
-
 ## Testing
 
 Unit tests are embedded in `src/lexer.rs`. Integration tests live in `tests/`.
@@ -96,8 +43,7 @@ cargo test --test lexer_integration_test
 
 ## Documentation
 
-Generate and open HTML documentation (includes rustdoc examples):
-
+Generate documentation
 ```bash
 cargo doc --open
 ```
@@ -116,7 +62,7 @@ sdplc/
     └── lexer_integration_test.rs   # Full-program lexer tests
 ```
 
-## Compilation Pipeline (Planned)
+## Compilation Pipeline 
 
 ```
 IEC 61131-3 ST Source
