@@ -1,5 +1,4 @@
-mod lexer;
-use lexer::{Lexer, TokenType};
+use sdplc::lexer::{Lexer, TokenType};
 
 fn main() {
     let source_code = r#"
@@ -16,7 +15,7 @@ END_VAR
 (* Main conveyor control logic *)
 IF running AND speed > 0.0 THEN
     count := count + 1;
-    
+
     // Safety: stop if we exceed the limit
     IF count >= limit THEN
         running := FALSE;

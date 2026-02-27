@@ -6,161 +6,335 @@
 
 // ─── Token Types ────────────────────────────────────────────────
 
-/// Represents the specific type of the token.
+/// Classification of an IEC 61131-3 Structured Text token.
+///
+/// Each variant corresponds to a lexical element defined by the
+/// IEC 61131-3:2025 standard. The lexer maps raw source text to
+/// one of these variants, which the parser then consumes to build
+/// an Abstract Syntax Tree.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     // ── Special ──
+
+    /// End of input — the final token emitted by the lexer.
     Eof,
+    /// An unrecognised character or sequence that does not match
+    /// any IEC 61131-3 lexical rule.
     Unknown,
 
     // ── Identifiers & Literals ──
-    Ident,          // Variable/function names
-    IntLiteral,     // 42, 16#FF, 8#77, 2#1010, 1_000
-    RealLiteral,    // 3.14, 1.0e-3
-    StringLiteral,  // 'hello world'
-    WStringLiteral, // "hello world" (double-quoted wide string)
-    TimeLiteral,    // T#5s, TIME#1h2m3s
-    DateLiteral,    // D#2025-12-01
-    TodLiteral,     // TOD#14:30:00
-    DtLiteral,      // DT#2025-12-01-14:30:00
-    BoolLiteral,    // TRUE, FALSE
+
+    /// A user-defined identifier such as a variable, function, or
+    /// program name (e.g. `MyCounter`, `speed_ref`).
+    Ident,
+    /// An integer literal, including decimal (`42`), based
+    /// (`16#FF`, `8#77`, `2#1010`), and underscore-separated
+    /// (`1_000`) forms.
+    IntLiteral,
+    /// A real (floating-point) literal with optional exponent
+    /// (e.g. `3.14`, `1.0e-3`, `0.5E+2`).
+    RealLiteral,
+    /// A single-byte string literal delimited by single quotes
+    /// (e.g. `'hello'`). Uses `$` as the IEC 61131-3 escape character.
+    StringLiteral,
+    /// A wide (double-byte) string literal delimited by double
+    /// quotes (e.g. `"hello"`).
+    WStringLiteral,
+    /// A duration literal prefixed with `T#` or `TIME#`
+    /// (e.g. `T#5s`, `TIME#1h2m3s`).
+    TimeLiteral,
+    /// A date literal prefixed with `D#` or `DATE#`
+    /// (e.g. `D#2025-12-01`).
+    DateLiteral,
+    /// A time-of-day literal prefixed with `TOD#` or `TIME_OF_DAY#`
+    /// (e.g. `TOD#14:30:00`).
+    TodLiteral,
+    /// A combined date-and-time literal prefixed with `DT#` or
+    /// `DATE_AND_TIME#` (e.g. `DT#2025-12-01-14:30:00`).
+    DtLiteral,
+    /// A boolean literal: `TRUE` or `FALSE`.
+    BoolLiteral,
 
     // ── Program Organisation Units ──
-    Program,        // PROGRAM
-    EndProgram,     // END_PROGRAM
-    Function,       // FUNCTION
-    EndFunction,    // END_FUNCTION
-    FunctionBlock,  // FUNCTION_BLOCK
-    EndFunctionBlock, // END_FUNCTION_BLOCK
+
+    /// `PROGRAM` keyword — begins a program declaration.
+    Program,
+    /// `END_PROGRAM` keyword — terminates a program declaration.
+    EndProgram,
+    /// `FUNCTION` keyword — begins a function declaration.
+    Function,
+    /// `END_FUNCTION` keyword — terminates a function declaration.
+    EndFunction,
+    /// `FUNCTION_BLOCK` keyword — begins a function block declaration.
+    FunctionBlock,
+    /// `END_FUNCTION_BLOCK` keyword — terminates a function block declaration.
+    EndFunctionBlock,
 
     // ── Variable Declarations ──
-    Var,            // VAR
-    EndVar,         // END_VAR
-    VarInput,       // VAR_INPUT
-    EndVarInput,    // Reuses EndVar
-    VarOutput,      // VAR_OUTPUT
-    VarInOut,       // VAR_IN_OUT
-    VarGlobal,      // VAR_GLOBAL
-    VarExternal,    // VAR_EXTERNAL
-    VarTemp,        // VAR_TEMP
-    Retain,         // RETAIN
-    Constant,       // CONSTANT
-    At,             // AT (direct address)
+
+    /// `VAR` keyword — begins a local variable block.
+    Var,
+    /// `END_VAR` keyword — terminates any variable block.
+    EndVar,
+    /// `VAR_INPUT` keyword — begins an input variable block.
+    VarInput,
+    /// `VAR_OUTPUT` keyword — begins an output variable block.
+    VarOutput,
+    /// `VAR_IN_OUT` keyword — begins an in-out variable block.
+    VarInOut,
+    /// `VAR_GLOBAL` keyword — begins a global variable block.
+    VarGlobal,
+    /// `VAR_EXTERNAL` keyword — begins an external variable block.
+    VarExternal,
+    /// `VAR_TEMP` keyword — begins a temporary variable block.
+    VarTemp,
+    /// `RETAIN` qualifier — marks variables as retentive.
+    Retain,
+    /// `CONSTANT` qualifier — marks variables as constant.
+    Constant,
+    /// `AT` keyword — used for direct address binding.
+    At,
 
     // ── Data Type Keywords ──
-    TypeBool,       // BOOL
-    TypeSint,       // SINT
-    TypeInt,        // INT
-    TypeDint,       // DINT
-    TypeLint,       // LINT
-    TypeUsint,      // USINT
-    TypeUint,       // UINT
-    TypeUdint,      // UDINT
-    TypeUlint,      // ULINT
-    TypeReal,       // REAL
-    TypeLreal,      // LREAL
-    TypeByte,       // BYTE
-    TypeWord,       // WORD
-    TypeDword,      // DWORD
-    TypeLword,      // LWORD
-    TypeString,     // STRING
-    TypeWstring,    // WSTRING
-    TypeTime,       // TIME
-    TypeDate,       // DATE
-    TypeTod,        // TIME_OF_DAY / TOD
-    TypeDt,         // DATE_AND_TIME / DT
+
+    /// `BOOL` — 1-bit boolean type.
+    TypeBool,
+    /// `SINT` — 8-bit signed integer.
+    TypeSint,
+    /// `INT` — 16-bit signed integer.
+    TypeInt,
+    /// `DINT` — 32-bit signed integer.
+    TypeDint,
+    /// `LINT` — 64-bit signed integer.
+    TypeLint,
+    /// `USINT` — 8-bit unsigned integer.
+    TypeUsint,
+    /// `UINT` — 16-bit unsigned integer.
+    TypeUint,
+    /// `UDINT` — 32-bit unsigned integer.
+    TypeUdint,
+    /// `ULINT` — 64-bit unsigned integer.
+    TypeUlint,
+    /// `REAL` — 32-bit IEEE 754 floating-point.
+    TypeReal,
+    /// `LREAL` — 64-bit IEEE 754 floating-point.
+    TypeLreal,
+    /// `BYTE` — 8-bit bit string.
+    TypeByte,
+    /// `WORD` — 16-bit bit string.
+    TypeWord,
+    /// `DWORD` — 32-bit bit string.
+    TypeDword,
+    /// `LWORD` — 64-bit bit string.
+    TypeLword,
+    /// `STRING` — single-byte character string.
+    TypeString,
+    /// `WSTRING` — wide (double-byte) character string.
+    TypeWstring,
+    /// `TIME` — duration type.
+    TypeTime,
+    /// `DATE` — calendar date type.
+    TypeDate,
+    /// `TIME_OF_DAY` / `TOD` — time-of-day type.
+    TypeTod,
+    /// `DATE_AND_TIME` / `DT` — combined date-and-time type.
+    TypeDt,
 
     // ── User-Defined Types ──
-    Type,           // TYPE
-    EndType,        // END_TYPE
-    Struct,         // STRUCT
-    EndStruct,      // END_STRUCT
-    Array,          // ARRAY
-    Of,             // OF
+
+    /// `TYPE` keyword — begins a type declaration.
+    Type,
+    /// `END_TYPE` keyword — terminates a type declaration.
+    EndType,
+    /// `STRUCT` keyword — begins a structure definition.
+    Struct,
+    /// `END_STRUCT` keyword — terminates a structure definition.
+    EndStruct,
+    /// `ARRAY` keyword — used in array type declarations.
+    Array,
+    /// `OF` keyword — separates array bounds from element type,
+    /// or case selector from case body.
+    Of,
 
     // ── Control Flow ──
-    If,             // IF
-    Then,           // THEN
-    Elsif,          // ELSIF
-    Else,           // ELSE
-    EndIf,          // END_IF
-    Case,           // CASE
-    EndCase,        // END_CASE
-    For,            // FOR
-    To,             // TO
-    By,             // BY
-    Do,             // DO
-    EndFor,         // END_FOR
-    While,          // WHILE
-    EndWhile,       // END_WHILE
-    Repeat,         // REPEAT
-    Until,          // UNTIL
-    EndRepeat,      // END_REPEAT
-    Exit,           // EXIT
-    Return,         // RETURN
+
+    /// `IF` keyword — begins a conditional statement.
+    If,
+    /// `THEN` keyword — separates condition from body.
+    Then,
+    /// `ELSIF` keyword — alternative condition branch.
+    Elsif,
+    /// `ELSE` keyword — default branch.
+    Else,
+    /// `END_IF` keyword — terminates an IF statement.
+    EndIf,
+    /// `CASE` keyword — begins a case/switch statement.
+    Case,
+    /// `END_CASE` keyword — terminates a CASE statement.
+    EndCase,
+    /// `FOR` keyword — begins a counted loop.
+    For,
+    /// `TO` keyword — upper bound in a FOR loop.
+    To,
+    /// `BY` keyword — step increment in a FOR loop.
+    By,
+    /// `DO` keyword — separates loop header from body.
+    Do,
+    /// `END_FOR` keyword — terminates a FOR loop.
+    EndFor,
+    /// `WHILE` keyword — begins a pre-condition loop.
+    While,
+    /// `END_WHILE` keyword — terminates a WHILE loop.
+    EndWhile,
+    /// `REPEAT` keyword — begins a post-condition loop.
+    Repeat,
+    /// `UNTIL` keyword — post-condition in a REPEAT loop.
+    Until,
+    /// `END_REPEAT` keyword — terminates a REPEAT loop.
+    EndRepeat,
+    /// `EXIT` keyword — breaks out of the innermost loop.
+    Exit,
+    /// `RETURN` keyword — early return from a function or function block.
+    Return,
 
     // ── Boolean / Bitwise Operators (keyword form) ──
-    And,            // AND / &
-    Or,             // OR
-    Xor,            // XOR
-    Not,            // NOT
-    Mod,            // MOD
+
+    /// `AND` keyword — logical/bitwise AND. Also matched by `&`.
+    And,
+    /// `OR` keyword — logical/bitwise OR.
+    Or,
+    /// `XOR` keyword — logical/bitwise exclusive OR.
+    Xor,
+    /// `NOT` keyword — logical/bitwise negation.
+    Not,
+    /// `MOD` keyword — integer modulo operator.
+    Mod,
 
     // ── Arithmetic Operators ──
-    Plus,           // +
-    Minus,          // -
-    Star,           // *
-    Slash,          // /
-    Power,          // **
+
+    /// `+` — addition or unary plus.
+    Plus,
+    /// `-` — subtraction or unary minus.
+    Minus,
+    /// `*` — multiplication.
+    Star,
+    /// `/` — division.
+    Slash,
+    /// `**` — exponentiation.
+    Power,
 
     // ── Comparison Operators ──
-    Equal,          // =
-    NotEqual,       // <>
-    Less,           // <
-    LessEq,         // <=
-    Greater,        // >
-    GreaterEq,      // >=
+
+    /// `=` — equality comparison.
+    Equal,
+    /// `<>` — inequality comparison.
+    NotEqual,
+    /// `<` — less-than comparison.
+    Less,
+    /// `<=` — less-than-or-equal comparison.
+    LessEq,
+    /// `>` — greater-than comparison.
+    Greater,
+    /// `>=` — greater-than-or-equal comparison.
+    GreaterEq,
 
     // ── Assignment & Connectors ──
-    Assignment,     // :=
-    OutputAssign,   // =>
-    Arrow,          // ->   (SFC transition)
-    
+
+    /// `:=` — variable assignment.
+    Assignment,
+    /// `=>` — output assignment in function block calls.
+    OutputAssign,
+    /// `->` — SFC transition connector.
+    Arrow,
+
     // ── Delimiters ──
-    Colon,          // :
-    SemiColon,      // ;
-    Comma,          // ,
-    Dot,            // .
-    DotDot,         // ..   (range for ARRAY, CASE)
-    LParen,         // (
-    RParen,         // )
-    LBracket,       // [
-    RBracket,       // ]
-    Hash,           // #    (typed literal prefix: INT#5)
-    Ampersand,      // &    (alternate AND)
+
+    /// `:` — type separator in declarations.
+    Colon,
+    /// `;` — statement terminator.
+    SemiColon,
+    /// `,` — separator in lists.
+    Comma,
+    /// `.` — member access (e.g. `fb_instance.output`).
+    Dot,
+    /// `..` — range operator (e.g. `0..9` in ARRAY bounds, CASE labels).
+    DotDot,
+    /// `(` — opening parenthesis.
+    LParen,
+    /// `)` — closing parenthesis.
+    RParen,
+    /// `[` — opening bracket (array subscript).
+    LBracket,
+    /// `]` — closing bracket (array subscript).
+    RBracket,
+    /// `#` — typed literal prefix separator (e.g. `INT#5`).
+    Hash,
+    /// `&` — alternate symbol for the AND operator.
+    Ampersand,
 }
 
-/// A single token with its classification, original text, and source location.
+/// A single token produced by the lexer.
+///
+/// Each token carries its [`TokenType`] classification, the exact
+/// source text that was matched, and the line/column where it begins
+/// (both 1-indexed).
 #[derive(Debug, Clone)]
 pub struct Token {
+    /// The classification of this token.
     pub kind: TokenType,
+    /// The exact text extracted from the source code.
     pub text: String,
+    /// The 1-indexed line number where the token begins.
     pub line: usize,
+    /// The 1-indexed column number where the token begins.
     pub col: usize,
 }
 
 // ─── Lexer ──────────────────────────────────────────────────────
 
+/// A lexer (scanner) for IEC 61131-3 Structured Text.
+///
+/// Converts a raw source string into a sequence of [`Token`]s.
+/// The lexer handles:
+///
+/// - All IEC 61131-3:2025 keywords (case-insensitive)
+/// - Integer, real, boolean, string, and temporal literals
+/// - Block comments `(* ... *)` with nesting support
+/// - Line comments `// ...`
+/// - Multi-character operators (`:=`, `<=`, `<>`, `**`, `..`, etc.)
+/// - Source location tracking (line and column)
+///
+/// # Example
+///
+/// ```
+/// use sdplc::lexer::{Lexer, TokenType};
+///
+/// let mut lexer = Lexer::new("VAR x : INT := 42; END_VAR");
+/// let tokens = lexer.tokenize();
+///
+/// assert_eq!(tokens[0].kind, TokenType::Var);
+/// assert_eq!(tokens[5].kind, TokenType::IntLiteral);
+/// assert_eq!(tokens[5].text, "42");
+/// ```
 pub struct Lexer {
+    /// The source code as a vector of characters for indexed access.
     input: Vec<char>,
+    /// Current read position in the input vector.
     position: usize,
+    /// The character at `position`, or `None` at end-of-input.
     current_char: Option<char>,
+    /// Current line number (1-indexed).
     line: usize,
+    /// Current column number (1-indexed).
     col: usize,
 }
 
 impl Lexer {
-    /// Creates a new Lexer from a source string.
+    /// Creates a new [`Lexer`] from a source string.
+    ///
+    /// The lexer is positioned at the first character of the input.
+    /// Call [`next_token`](Lexer::next_token) repeatedly or
+    /// [`tokenize`](Lexer::tokenize) to consume all tokens.
     pub fn new(input: &str) -> Self {
         let chars: Vec<char> = input.chars().collect();
         let first = chars.first().cloned();
@@ -175,6 +349,8 @@ impl Lexer {
 
     // ── Movement helpers ────────────────────────────────────────
 
+    /// Advances the read position by one character, updating line
+    /// and column counters.
     fn advance(&mut self) {
         if let Some(c) = self.current_char {
             if c == '\n' {
@@ -188,19 +364,27 @@ impl Lexer {
         self.current_char = self.input.get(self.position).cloned();
     }
 
+    /// Returns the next character without advancing the position.
     fn peek(&self) -> Option<char> {
         self.input.get(self.position + 1).cloned()
     }
 
+    /// Returns the character `n` positions ahead without advancing.
+    #[allow(dead_code)]
     fn peek_n(&self, n: usize) -> Option<char> {
         self.input.get(self.position + n).cloned()
     }
 
     // ── Whitespace & Comments ───────────────────────────────────
 
+    /// Skips over whitespace, block comments `(* ... *)`, and line
+    /// comments `// ...`.
+    ///
+    /// Block comments may be nested. An unterminated block comment
+    /// consumes to end-of-input without emitting an error token;
+    /// the parser is responsible for reporting this.
     fn skip_whitespace_and_comments(&mut self) {
         loop {
-            // Skip whitespace
             while let Some(c) = self.current_char {
                 if c.is_ascii_whitespace() {
                     self.advance();
@@ -209,14 +393,14 @@ impl Lexer {
                 }
             }
 
-            // Block comment: (* ... *)
+            // Block comment: (* ... *) — supports nesting
             if self.current_char == Some('(') && self.peek() == Some('*') {
-                self.advance(); // consume '('
-                self.advance(); // consume '*'
+                self.advance();
+                self.advance();
                 let mut depth = 1;
                 while depth > 0 {
                     match self.current_char {
-                        None => break, // unterminated comment — parser will catch it
+                        None => break,
                         Some('(') if self.peek() == Some('*') => {
                             depth += 1;
                             self.advance();
@@ -250,6 +434,11 @@ impl Lexer {
 
     // ── Identifier / Keyword scanner ────────────────────────────
 
+    /// Scans an identifier or keyword starting at the current position.
+    ///
+    /// IEC 61131-3 keywords are case-insensitive; the match is
+    /// performed on the uppercased form of the scanned text, while
+    /// the original casing is preserved in [`Token::text`].
     fn scan_identifier(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.col;
@@ -267,7 +456,6 @@ impl Lexer {
         let upper = text.to_ascii_uppercase();
 
         let kind = match upper.as_str() {
-            // Program Organisation Units
             "PROGRAM"            => TokenType::Program,
             "END_PROGRAM"        => TokenType::EndProgram,
             "FUNCTION"           => TokenType::Function,
@@ -275,7 +463,6 @@ impl Lexer {
             "FUNCTION_BLOCK"     => TokenType::FunctionBlock,
             "END_FUNCTION_BLOCK" => TokenType::EndFunctionBlock,
 
-            // Variable sections
             "VAR"                => TokenType::Var,
             "END_VAR"            => TokenType::EndVar,
             "VAR_INPUT"          => TokenType::VarInput,
@@ -288,7 +475,6 @@ impl Lexer {
             "CONSTANT"           => TokenType::Constant,
             "AT"                 => TokenType::At,
 
-            // Data types
             "BOOL"               => TokenType::TypeBool,
             "SINT"               => TokenType::TypeSint,
             "INT"                => TokenType::TypeInt,
@@ -311,7 +497,6 @@ impl Lexer {
             "TIME_OF_DAY" | "TOD" => TokenType::TypeTod,
             "DATE_AND_TIME" | "DT" => TokenType::TypeDt,
 
-            // User-defined types
             "TYPE"               => TokenType::Type,
             "END_TYPE"           => TokenType::EndType,
             "STRUCT"             => TokenType::Struct,
@@ -319,7 +504,6 @@ impl Lexer {
             "ARRAY"              => TokenType::Array,
             "OF"                 => TokenType::Of,
 
-            // Control flow
             "IF"                 => TokenType::If,
             "THEN"               => TokenType::Then,
             "ELSIF"              => TokenType::Elsif,
@@ -340,14 +524,12 @@ impl Lexer {
             "EXIT"               => TokenType::Exit,
             "RETURN"             => TokenType::Return,
 
-            // Boolean / bitwise operators
             "AND"                => TokenType::And,
             "OR"                 => TokenType::Or,
             "XOR"                => TokenType::Xor,
             "NOT"                => TokenType::Not,
             "MOD"                => TokenType::Mod,
 
-            // Boolean literals
             "TRUE"               => TokenType::BoolLiteral,
             "FALSE"              => TokenType::BoolLiteral,
 
@@ -358,50 +540,53 @@ impl Lexer {
     }
 
     // ── Numeric literal scanner ─────────────────────────────────
-    //
-    // Handles:  42   1_000   16#FF   8#77   2#1010_1100
-    //           3.14   1.0e-3   0.5E+2
-    //
-    // Does NOT consume a leading sign — the parser handles unary +/-.
-    // Does NOT consume a trailing # for typed literals (INT#5) —
-    // the parser sees Ident(INT) Hash IntLiteral(5).
 
+    /// Scans an integer or real literal starting at the current position.
+    ///
+    /// Handles the following forms:
+    /// - Decimal integers: `42`, `1_000`
+    /// - Based integers: `16#FF`, `8#77`, `2#1010_1100`
+    /// - Real literals: `3.14`, `1.0e-3`, `0.5E+2`
+    ///
+    /// Leading signs (`+`/`-`) are **not** consumed — the parser
+    /// treats those as unary operators. Trailing `#` for typed
+    /// literals (e.g. `INT#5`) is also left for the parser; the
+    /// lexer emits `TypeInt`, `Hash`, `IntLiteral` as three
+    /// separate tokens.
     fn scan_number(&mut self) -> Token {
         let start_line = self.line;
         let start_col = self.col;
         let start_pos = self.position;
         let mut is_real = false;
 
-        // Consume leading digits (possibly with underscores)
         self.eat_digits();
 
         // Check for base prefix: 16#, 8#, 2#
         if self.current_char == Some('#') && self.position > start_pos {
             let prefix: String = self.input[start_pos..self.position].iter().collect();
             if prefix == "16" || prefix == "8" || prefix == "2" {
-                self.advance(); // consume '#'
-                self.eat_hex_digits(); // hex covers all bases
+                self.advance();
+                self.eat_hex_digits();
                 let text: String = self.input[start_pos..self.position].iter().collect();
                 return Token { kind: TokenType::IntLiteral, text, line: start_line, col: start_col };
             }
         }
 
-        // Decimal point → real literal
+        // Decimal point → real literal (but not '..' range operator)
         if self.current_char == Some('.') && self.peek().map_or(false, |c| c.is_ascii_digit()) {
-            // Make sure it's not '..' (range)
             if self.peek() != Some('.') {
                 is_real = true;
-                self.advance(); // consume '.'
+                self.advance();
                 self.eat_digits();
             }
         }
 
-        // Exponent
+        // Exponent part
         if self.current_char == Some('e') || self.current_char == Some('E') {
             is_real = true;
-            self.advance(); // consume 'e'/'E'
+            self.advance();
             if self.current_char == Some('+') || self.current_char == Some('-') {
-                self.advance(); // consume sign
+                self.advance();
             }
             self.eat_digits();
         }
@@ -411,7 +596,7 @@ impl Lexer {
         Token { kind, text, line: start_line, col: start_col }
     }
 
-    /// Eat decimal digits and underscores
+    /// Consumes consecutive decimal digits and underscores.
     fn eat_digits(&mut self) {
         while let Some(c) = self.current_char {
             if c.is_ascii_digit() || c == '_' {
@@ -422,7 +607,10 @@ impl Lexer {
         }
     }
 
-    /// Eat hex digits and underscores (superset — works for base 2, 8, 16)
+    /// Consumes consecutive hexadecimal digits and underscores.
+    /// This is a superset that also works for base-2 and base-8
+    /// literals; out-of-range digits are caught during semantic
+    /// analysis rather than lexing.
     fn eat_hex_digits(&mut self) {
         while let Some(c) = self.current_char {
             if c.is_ascii_hexdigit() || c == '_' {
@@ -434,27 +622,28 @@ impl Lexer {
     }
 
     // ── String literal scanner ──────────────────────────────────
-    //
-    // IEC 61131-3 single-byte strings use single quotes: 'abc'
-    // Wide strings use double quotes: "abc"
-    // Escape sequences: $$ $' $" $L $N $R $T $xx
 
+    /// Scans a string or wide-string literal.
+    ///
+    /// IEC 61131-3 uses single quotes for single-byte strings and
+    /// double quotes for wide strings. The escape character is `$`,
+    /// supporting sequences like `$$`, `$'`, `$"`, `$L`, `$N`,
+    /// `$R`, `$T`, and `$xx` (hex byte).
     fn scan_string(&mut self, quote: char) -> Token {
         let start_line = self.line;
         let start_col = self.col;
         let start_pos = self.position;
 
-        self.advance(); // consume opening quote
+        self.advance();
 
         while let Some(c) = self.current_char {
             if c == '$' {
-                // IEC 61131-3 escape — skip the next char
                 self.advance();
                 if self.current_char.is_some() {
                     self.advance();
                 }
             } else if c == quote {
-                self.advance(); // consume closing quote
+                self.advance();
                 break;
             } else {
                 self.advance();
@@ -471,19 +660,21 @@ impl Lexer {
     }
 
     // ── Time / Date literal scanner ─────────────────────────────
-    //
-    // Called after we've already scanned a keyword (TIME, T, DATE, D,
-    // TOD, DT) and see '#' as the next character.
-    // We consume '#' and everything up to the next whitespace/delimiter.
 
+    /// Scans a temporal literal after the prefix keyword and `#`
+    /// have been identified.
+    ///
+    /// Called when the lexer has already scanned a keyword like `T`,
+    /// `TIME`, `D`, `DATE`, `TOD`, or `DT` and the next character
+    /// is `#`. Consumes the `#` and the literal value
+    /// (digits, letters, colons, hyphens, dots, underscores).
     fn scan_temporal_literal(&mut self, prefix: &str) -> Token {
         let start_line = self.line;
         let start_col = self.col - prefix.len();
         let start_pos = self.position - prefix.len();
 
-        self.advance(); // consume '#'
+        self.advance();
 
-        // Consume the literal value: digits, letters, colons, hyphens, dots, underscores
         while let Some(c) = self.current_char {
             if c.is_ascii_alphanumeric() || c == ':' || c == '-' || c == '.' || c == '_' {
                 self.advance();
@@ -499,13 +690,17 @@ impl Lexer {
             "D" | "DATE"                    => TokenType::DateLiteral,
             "TOD" | "TIME_OF_DAY"           => TokenType::TodLiteral,
             "DT" | "DATE_AND_TIME"          => TokenType::DtLiteral,
-            _ => TokenType::Ident, // shouldn't happen
+            _ => TokenType::Ident,
         };
         Token { kind, text, line: start_line, col: start_col }
     }
 
     // ── Main tokeniser entry point ──────────────────────────────
 
+    /// Scans and returns the next token from the input.
+    ///
+    /// Whitespace and comments are skipped automatically. Returns
+    /// [`TokenType::Eof`] when the input is exhausted.
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace_and_comments();
 
@@ -526,15 +721,13 @@ impl Lexer {
         if c.is_ascii_alphabetic() || c == '_' {
             let tok = self.scan_identifier();
 
-            // Check for temporal literal: keyword immediately followed by '#'
-            // e.g. T#5s, TIME#1h2m, D#2025-01-01, TOD#14:30:00, DT#...
             let upper = tok.text.to_ascii_uppercase();
             if self.current_char == Some('#') {
                 match upper.as_str() {
                     "T" | "TIME" | "D" | "DATE" | "TOD" | "TIME_OF_DAY" | "DT" | "DATE_AND_TIME" => {
                         return self.scan_temporal_literal(&tok.text);
                     }
-                    _ => {} // Typed literal like INT#5 — return the ident, '#' comes next
+                    _ => {}
                 }
             }
             return tok;
@@ -555,56 +748,48 @@ impl Lexer {
 
         // ── Multi-character operators ──
 
-        // :=  (assignment)
         if c == ':' && self.peek() == Some('=') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::Assignment, text: ":=".into(), line: start_line, col: start_col };
         }
 
-        // =>  (output assignment / FB connection)
         if c == '=' && self.peek() == Some('>') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::OutputAssign, text: "=>".into(), line: start_line, col: start_col };
         }
 
-        // **  (exponentiation)
         if c == '*' && self.peek() == Some('*') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::Power, text: "**".into(), line: start_line, col: start_col };
         }
 
-        // <>  (not equal)
         if c == '<' && self.peek() == Some('>') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::NotEqual, text: "<>".into(), line: start_line, col: start_col };
         }
 
-        // <=  (less than or equal)
         if c == '<' && self.peek() == Some('=') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::LessEq, text: "<=".into(), line: start_line, col: start_col };
         }
 
-        // >=  (greater than or equal)
         if c == '>' && self.peek() == Some('=') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::GreaterEq, text: ">=".into(), line: start_line, col: start_col };
         }
 
-        // ->  (SFC transition)
         if c == '-' && self.peek() == Some('>') {
             self.advance();
             self.advance();
             return Token { kind: TokenType::Arrow, text: "->".into(), line: start_line, col: start_col };
         }
 
-        // ..  (range)
         if c == '.' && self.peek() == Some('.') {
             self.advance();
             self.advance();
@@ -641,6 +826,10 @@ impl Lexer {
 
     // ── Convenience: collect all tokens ─────────────────────────
 
+    /// Consumes the entire input and returns all tokens as a vector.
+    ///
+    /// The returned vector always ends with a [`TokenType::Eof`]
+    /// token. Whitespace and comments are skipped automatically.
     pub fn tokenize(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         loop {
@@ -655,13 +844,13 @@ impl Lexer {
     }
 }
 
-// ─── Tests ──────────────────────────────────────────────────────
+// ─── Unit Tests ─────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Helper: lex source and return vec of (TokenType, text)
+    /// Helper: lex source and return vec of (TokenType, text).
     fn lex(src: &str) -> Vec<(TokenType, String)> {
         Lexer::new(src)
             .tokenize()
@@ -672,36 +861,23 @@ mod tests {
 
     #[test]
     fn test_original_example() {
-        // The test from your original main.rs
         let tokens = lex("PROGRAM MyFirstPLC VAR count : INT := 0; END_VAR");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::Program,
-            TokenType::Ident,       // MyFirstPLC
-            TokenType::Var,
-            TokenType::Ident,       // count
-            TokenType::Colon,
-            TokenType::TypeInt,
-            TokenType::Assignment,
-            TokenType::IntLiteral,  // 0
-            TokenType::SemiColon,
-            TokenType::EndVar,
-            TokenType::Eof,
+            TokenType::Program, TokenType::Ident, TokenType::Var,
+            TokenType::Ident, TokenType::Colon, TokenType::TypeInt,
+            TokenType::Assignment, TokenType::IntLiteral,
+            TokenType::SemiColon, TokenType::EndVar, TokenType::Eof,
         ]);
     }
 
     #[test]
     fn test_case_insensitivity() {
-        // IEC 61131-3 keywords are case-insensitive
         let tokens = lex("program var int end_var end_program");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::Program,
-            TokenType::Var,
-            TokenType::TypeInt,
-            TokenType::EndVar,
-            TokenType::EndProgram,
-            TokenType::Eof,
+            TokenType::Program, TokenType::Var, TokenType::TypeInt,
+            TokenType::EndVar, TokenType::EndProgram, TokenType::Eof,
         ]);
     }
 
@@ -746,12 +922,9 @@ mod tests {
         let tokens = lex(":= => ** -> ..");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::Assignment,
-            TokenType::OutputAssign,
-            TokenType::Power,
-            TokenType::Arrow,
-            TokenType::DotDot,
-            TokenType::Eof,
+            TokenType::Assignment, TokenType::OutputAssign,
+            TokenType::Power, TokenType::Arrow,
+            TokenType::DotDot, TokenType::Eof,
         ]);
     }
 
@@ -772,10 +945,8 @@ mod tests {
         let tokens = lex("3.14 1.0e-3 42.0E+2");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::RealLiteral,
-            TokenType::RealLiteral,
-            TokenType::RealLiteral,
-            TokenType::Eof,
+            TokenType::RealLiteral, TokenType::RealLiteral,
+            TokenType::RealLiteral, TokenType::Eof,
         ]);
         assert_eq!(tokens[0].1, "3.14");
         assert_eq!(tokens[1].1, "1.0e-3");
@@ -787,10 +958,8 @@ mod tests {
         let tokens = lex("16#FF 8#77 2#1010");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::IntLiteral,
-            TokenType::IntLiteral,
-            TokenType::IntLiteral,
-            TokenType::Eof,
+            TokenType::IntLiteral, TokenType::IntLiteral,
+            TokenType::IntLiteral, TokenType::Eof,
         ]);
         assert_eq!(tokens[0].1, "16#FF");
         assert_eq!(tokens[1].1, "8#77");
@@ -854,14 +1023,11 @@ mod tests {
 
     #[test]
     fn test_typed_literal_produces_separate_tokens() {
-        // INT#5 should be: TypeInt, Hash, IntLiteral
         let tokens = lex("INT#5");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::TypeInt,
-            TokenType::Hash,
-            TokenType::IntLiteral,
-            TokenType::Eof,
+            TokenType::TypeInt, TokenType::Hash,
+            TokenType::IntLiteral, TokenType::Eof,
         ]);
     }
 
@@ -920,17 +1086,10 @@ mod tests {
         let tokens = lex("arr : ARRAY[0..9] OF INT");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
         assert_eq!(kinds, vec![
-            TokenType::Ident,       // arr
-            TokenType::Colon,
-            TokenType::Array,
-            TokenType::LBracket,
-            TokenType::IntLiteral,  // 0
-            TokenType::DotDot,
-            TokenType::IntLiteral,  // 9
-            TokenType::RBracket,
-            TokenType::Of,
-            TokenType::TypeInt,
-            TokenType::Eof,
+            TokenType::Ident, TokenType::Colon, TokenType::Array,
+            TokenType::LBracket, TokenType::IntLiteral, TokenType::DotDot,
+            TokenType::IntLiteral, TokenType::RBracket,
+            TokenType::Of, TokenType::TypeInt, TokenType::Eof,
         ]);
     }
 
@@ -963,10 +1122,10 @@ mod tests {
     #[test]
     fn test_line_tracking() {
         let tokens = lex("VAR\n  x : INT;\nEND_VAR");
-        assert_eq!(tokens[0].line, 1); // VAR
-        assert_eq!(tokens[1].line, 2); // x
-        assert_eq!(tokens[4].line, 2); // ;
-        assert_eq!(tokens[5].line, 3); // END_VAR
+        assert_eq!(tokens[0].line, 1);
+        assert_eq!(tokens[1].line, 2);
+        assert_eq!(tokens[4].line, 2);
+        assert_eq!(tokens[5].line, 3);
     }
 
     #[test]
@@ -993,11 +1152,9 @@ END_PROGRAM
 "#;
         let mut lexer = Lexer::new(src);
         let tokens = lexer.tokenize();
-        // Should parse without Unknown tokens (except EOF)
         for t in &tokens {
             assert_ne!(t.kind, TokenType::Unknown, "Unknown token: '{}' at {}:{}", t.text, t.line, t.col);
         }
-        // Verify we got the right bookends
         assert_eq!(tokens.first().unwrap().kind, TokenType::Program);
         assert_eq!(tokens[tokens.len() - 2].kind, TokenType::EndProgram);
         assert_eq!(tokens.last().unwrap().kind, TokenType::Eof);
