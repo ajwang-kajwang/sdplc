@@ -1,4 +1,4 @@
-// src/lexer.rs
+// frontend/lexer.rs
 //
 // IEC 61131-3 Structured Text Lexer
 // Covers keywords, data types, operators, literals, and comments
@@ -297,7 +297,7 @@ pub struct Token {
 /// Converts a raw source string into a sequence of [`Token`]s.
 /// The lexer handles:
 ///
-/// - All IEC 61131-3:2025 keywords (case-insensitive)
+/// - All IEC 61131-3:2025 keywords
 /// - Integer, real, boolean, string, and temporal literals
 /// - Block comments `(* ... *)` with nesting support
 /// - Line comments `// ...`

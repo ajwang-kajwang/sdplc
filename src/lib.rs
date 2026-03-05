@@ -3,29 +3,38 @@
 //! An IEC 61131-3 Structured Text compiler targeting LLVM IR
 //! for cross-platform industrial control.
 //!
-//! This crate currently implements the **lexer** stage of the
-//! compilation pipeline, converting raw Structured Text source
-//! code into a token stream suitable for parsing.
+//! This crate implements the **lexer**, **parser**, and **semantic
+//! analysis** stages of the compilation pipeline, converting raw
+//! Structured Text source code into a validated, type-resolved
+//! [`ProgramContext`](semantic::ProgramContext) ready for LLVM IR
+//! generation via `inkwell`.
 //!
 //! ## Architecture
 //!
 //! ```text
-//! ┌────────────┐    ┌────────┐    ┌──────────┐    ┌─────────┐
-//! │ ST Source   │───▶│ Lexer  │───▶│  Parser  │───▶│ LLVM IR │
-//! │ (PLCopen)   │    │        │    │  (TODO)  │    │  (TODO) │
-//! └────────────┘    └────────┘    └──────────┘    └─────────┘
+//! ┌────────────┐    ┌────────┐    ┌────────┐    ┌──────────┐    ┌─────────┐
+//! │ ST Source   │───▶│ Lexer  │───▶│ Parser │───▶│ Semantic │───▶│ LLVM IR │
+//! │ (PLCopen)   │    │   ✅   │    │   ✅   │    │    ✅    │    │  (TODO) │
+//! └────────────┘    └────────┘    └────────┘    └──────────┘    └─────────┘
 //! ```
 //!
 //! ## Quick Start
 //!
 //! ```
-//! use sdplc::lexer::{Lexer, TokenType};
+//! use sdplc::lexer::Lexer;
+//! use sdplc::parser::Parser;
+//! use sdplc::semantic::analyze;
 //!
-//! let mut lexer = Lexer::new("PROGRAM Main END_PROGRAM");
-//! let tokens = lexer.tokenize();
+//! let source = "PROGRAM Main VAR x : INT := 0; END_VAR x := x + 1; END_PROGRAM";
+//! let lexer = Lexer::new(source);
+//! let mut parser = Parser::new(lexer);
+//! let ast = parser.parse().expect("parse error");
+//! let ctx = analyze(ast);
 //!
-//! assert_eq!(tokens[0].kind, TokenType::Program);
-//! assert_eq!(tokens[0].text, "PROGRAM");
+//! assert!(!ctx.has_errors(), "semantic errors found");
 //! ```
 
+pub mod ast;
 pub mod lexer;
+pub mod parser;
+pub mod semantic;
