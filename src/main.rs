@@ -1,7 +1,10 @@
 use sdplc::ast::*;
+use sdplc::codegen::CodeGenerator;
 use sdplc::lexer::Lexer;
 use sdplc::parser::Parser;
 use sdplc::semantic;
+
+use inkwell::context::Context;
 
 fn main() {
     let source_code = r#"
@@ -40,7 +43,7 @@ END_CASE;
 END_PROGRAM
 "#;
 
-    println!("═══ SD-PLC Compiler Frontend ═══\n");
+    println!("═══ SD-PLC Compiler ═══\n");
 
     // ── Stage 1: Lexing ──
     let mut token_lexer = Lexer::new(source_code);
@@ -50,12 +53,12 @@ END_PROGRAM
         .count();
 
     println!("Stage 1 — Lexer");
-    println!("  Source: {} chars → {} tokens", source_code.len(), tokens.len());
+    println!("  {} chars → {} tokens", source_code.len(), tokens.len());
     if unknown_count > 0 {
-        println!("  ✗ {} unknown token(s) — aborting.", unknown_count);
+        println!("  ✗ {} unknown token(s)", unknown_count);
         return;
     }
-    println!("  ✓ All tokens recognised.\n");
+    println!("  ✓ Complete.\n");
 
     // ── Stage 2: Parsing ──
     let lexer = Lexer::new(source_code);
@@ -63,7 +66,7 @@ END_PROGRAM
     let ast = match parser.parse() {
         Ok(ast) => {
             println!("Stage 2 — Parser");
-            println!("  ✓ AST built ({} POU(s)).\n", ast.units.len());
+            println!("  ✓ AST: {} POU(s)\n", ast.units.len());
             ast
         }
         Err(e) => {
@@ -74,64 +77,51 @@ END_PROGRAM
     };
 
     // ── Stage 3: Semantic Analysis ──
-    let ctx = semantic::analyze(ast);
+    let sem_ast = ast.clone();
+    let ctx = semantic::analyze(sem_ast);
 
     println!("Stage 3 — Semantic Analysis");
-    println!("  Errors:   {}", ctx.error_count());
-    println!("  Warnings: {}", ctx.warning_count());
-
+    println!("  {} error(s), {} warning(s)", ctx.error_count(), ctx.warning_count());
     for d in &ctx.diagnostics {
         println!("  {}", d);
     }
-
     if ctx.has_errors() {
-        println!("  ✗ Compilation aborted.\n");
+        println!("  ✗ Aborting.\n");
         return;
     }
-    println!("  ✓ All checks passed.\n");
+    println!("  ✓ Complete.\n");
 
-    // ── Summary ──
-    println!("── AST Summary ──\n");
-    for pou in &ctx.ast.units {
-        match pou {
-            Pou::Program(p) => {
-                println!("  PROGRAM {}", p.name);
-                for vb in &p.var_blocks {
-                    for decl in &vb.declarations {
-                        let sym = ctx.symbols.lookup(&decl.name);
-                        let resolved = sym
-                            .map(|s| format!("{}", s.resolved_type))
-                            .unwrap_or_else(|| "?".to_string());
-                        println!("    {} : {} → {}", decl.name, format!("{:?}", decl.type_spec), resolved);
-                    }
-                }
-                println!("    Body: {} statement(s)", p.body.len());
-                for (i, stmt) in p.body.iter().enumerate() {
-                    println!("      [{}] {}", i, describe_stmt(stmt));
-                }
+    // ── Stage 4: LLVM IR Generation ──
+    let llvm_context = Context::create();
+    let mut codegen = CodeGenerator::new(&llvm_context, "sdplc_conveyor");
+
+    match codegen.compile(&ast) {
+        Ok(()) => {
+            println!("Stage 4 — LLVM IR Generation");
+            println!("  ✓ IR emitted.\n");
+
+            // Print IR
+            println!("── Generated LLVM IR ──────────────────────────\n");
+            let ir = codegen.ir_string();
+            println!("{}", ir);
+
+            // Write to files
+            match codegen.write_ir("output.ll") {
+                Ok(()) => println!("  → Wrote output.ll"),
+                Err(e) => println!("  ✗ Failed to write .ll: {}", e),
             }
-            Pou::Function(f) => println!("  FUNCTION {}", f.name),
-            Pou::FunctionBlock(fb) => println!("  FUNCTION_BLOCK {}", fb.name),
-        }
-    }
-    println!("\n✓ Ready for LLVM IR generation.");
-}
+            if codegen.write_bitcode("output.bc") {
+                println!("  → Wrote output.bc");
+            }
 
-fn describe_stmt(stmt: &Statement) -> String {
-    match stmt {
-        Statement::Assignment { .. } => "Assignment".to_string(),
-        Statement::If { elsif_branches, else_body, .. } => format!(
-            "IF ({} elsif, {})",
-            elsif_branches.len(),
-            if else_body.is_some() { "else" } else { "no else" }
-        ),
-        Statement::For { variable, .. } => format!("FOR {}", variable),
-        Statement::While { .. } => "WHILE".to_string(),
-        Statement::Repeat { .. } => "REPEAT".to_string(),
-        Statement::Case { branches, .. } => format!("CASE ({} branches)", branches.len()),
-        Statement::Exit { .. } => "EXIT".to_string(),
-        Statement::Return { .. } => "RETURN".to_string(),
-        Statement::CallStatement { name, .. } => format!("CALL {}", name),
-        Statement::Empty => ";".to_string(),
+            println!("\n── Next Steps ──");
+            println!("  Compile to native:   llc output.ll -o output.s");
+            println!("  Compile to object:   llc output.ll -filetype=obj -o output.o");
+            println!("  Cross-compile ARM:   llc output.ll -mtriple=aarch64-linux-gnu -o output_arm.s");
+        }
+        Err(e) => {
+            println!("Stage 4 — LLVM IR Generation");
+            println!("  ✗ {}\n", e);
+        }
     }
 }

@@ -591,7 +591,7 @@ impl SemanticAnalyzer {
 
             Statement::For { variable, from, to, by, body, span } => {
                 // FOR variable must be declared and integer
-                if let Some(sym) = self.symbols.lookup(variable) {
+                if let Some(sym) = self.symbols.lookup(variable).cloned() {
                     if !sym.resolved_type.is_integer() {
                         self.error(span, format!(
                             "FOR variable '{}' must be an integer type, found {}",

@@ -13,9 +13,9 @@ SD-PLC compiles IEC 61131-3 Structured Text programs through LLVM to produce nat
 | Lexer | ✅ Complete — full IEC 61131-3:2025 ST coverage |
 | Parser / AST | ✅ Complete — recursive descent with precedence climbing |
 | Semantic Analysis | ✅ Complete — type resolution, scope validation, LLVM type mapping |
-| LLVM IR Generation | 🔲 Next |
-| Runtime | 🔲 Planned |
-| OPC UA / Django IDE | 🔲 Planned |
+| LLVM IR Generation | ✅ Complete — inkwell codegen for all ST constructs |
+| Runtime | 🔲 Next — deterministic scan cycle executor |
+| OPC UA | 🔲 Planned |
 
 ### Target Architectures
 
@@ -110,41 +110,65 @@ sdplc/
 ├── README.md
 ├── src/
 │   ├── lib.rs          # Crate root — exports modules
-│   ├── main.rs         # CLI entry point (3-stage frontend demo)
+│   ├── main.rs         # CLI entry point (4-stage compiler demo)
 │   ├── ast.rs          # AST node definitions
+│   ├── codegen.rs      # LLVM IR generation via inkwell
 │   ├── lexer.rs        # IEC 61131-3 ST lexer
 │   ├── parser.rs       # Recursive descent parser
 │   └── semantic.rs     # Type resolution, scope validation, type checking
 └── tests/
     ├── lexer_integration_test.rs      # Full-program lexer tests
     ├── parser_integration_test.rs     # Full-program parser tests
-    └── semantic_integration_test.rs   # Type checking / validation tests
+    ├── semantic_integration_test.rs   # Type checking / validation tests
+    └── codegen_integration_test.rs    # LLVM IR output verification tests
 ```
 
-## Compilation Pipeline (Planned)
+## Compiling to Native Code
+
+After `cargo run` generates `output.ll` and `output.bc`, use LLVM tools to compile for any target:
+
+```bash
+# Native (development machine)
+llc output.ll -o output.s
+gcc output.s -o conveyor
+
+# ARMv8 (Jetson Orin Nano / Raspberry Pi 4)
+llc output.ll -mtriple=aarch64-linux-gnu -o output_arm64.s
+aarch64-linux-gnu-gcc output_arm64.s -o conveyor_arm64
+
+# ARMv5TE (Nuvoton NUC980)
+llc output.ll -mtriple=armv5te-linux-gnueabi -o output_armv5.s
+
+# WebAssembly
+llc output.ll -mtriple=wasm32-unknown-unknown -o output.wasm
+```
+
+This is the thesis claim made concrete: the **same Structured Text source** compiles to native binaries for all four target architectures through a single LLVM IR representation.
+
+## Compilation Pipeline
 
 ```
 IEC 61131-3 ST Source
         │
         ▼
    ┌─────────┐
-   │  Lexer   │  ← you are here
+   │  Lexer   │  ✅
    └────┬─────┘
         │ Token stream
         ▼
    ┌─────────┐
-   │  Parser  │  → Abstract Syntax Tree
+   │  Parser  │  ✅  → Abstract Syntax Tree
    └────┬─────┘
         │
         ▼
    ┌──────────────┐
-   │   Semantic    │  → Type checking, scope validation
+   │   Semantic    │  ✅  → Type checking, scope validation
    │   Analysis    │
    └──────┬───────┘
           │
           ▼
    ┌──────────────┐
-   │  LLVM IR Gen  │  → Platform-independent IR (inkwell)
+   │ LLVM Codegen  │  ✅  → Platform-independent IR (inkwell)
    └──────┬───────┘
           │
      ┌────┴────┐
@@ -152,5 +176,3 @@ IEC 61131-3 ST Source
   Native    WebAssembly
   (x86,     (portable,
    ARM)      sandboxed)
-```
-

@@ -1,4 +1,4 @@
-// frontend/lexer.rs
+// src/lexer.rs
 //
 // IEC 61131-3 Structured Text Lexer
 // Covers keywords, data types, operators, literals, and comments
