@@ -13,63 +13,15 @@ SD-PLC compiles IEC 61131-3 Structured Text programs through LLVM to produce nat
 | Lexer | ✅ Complete — full IEC 61131-3:2025 ST coverage |
 | Parser / AST | ✅ Complete — recursive descent with precedence climbing |
 | Semantic Analysis | ✅ Complete — type resolution, scope validation, LLVM type mapping |
+<<<<<<< HEAD
 | LLVM IR Generation | ✅ Complete — inkwell codegen for all ST constructs |
 | Runtime | 🔲 Next — deterministic scan cycle executor |
+=======
+| LLVM IR Generation | 🔲 Next |
+| Runtime | 🔲 Planned |
+>>>>>>> e3a4cc8345b498fc27ca3fb3d2e1d0706498015b
 | OPC UA | 🔲 Planned |
 
-### Target Architectures
-
-| Platform | Architecture | Tier |
-|----------|-------------|------|
-| Development laptop | x86\_64 | Tier 1 |
-| Jetson Orin Nano | ARMv8.2-A (Cortex-A78AE) | Tier 1 |
-| Raspberry Pi 4 | ARMv8-A (Cortex-A72) | Tier 1 |
-| Nuvoton NUC980 | ARMv5TE (ARM926EJ-S) | Tier 2 |
-
-## Prerequisites
-
-### Rust Toolchain
-
-Install via [rustup](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-### LLVM 17
-
-The `inkwell` crate requires LLVM 17 development libraries.
-
-**Ubuntu / Debian:**
-
-```bash
-wget https://apt.llvm.org/llvm.sh
-chmod +x llvm.sh
-sudo ./llvm.sh 17
-sudo apt install llvm-17-dev libpolly-17-dev
-```
-
-**macOS (Homebrew):**
-
-```bash
-brew install llvm@17
-```
-
-**Windows:**
-
-The project looks for LLVM 17 at the path configured in `.cargo/config.toml`. Update the path if your installation differs:
-
-```toml
-# .cargo/config.toml
-[env]
-LLVM_SYS_170_PREFIX = "C:\\Users\\kajwa\\Development\\llvm-install"
-```
-
-## Building
-
-```bash
-cargo build
-```
 
 ## Running
 
