@@ -103,7 +103,6 @@ The dashboard shows all PROGRAM variables updating in real time:
 
 ## Project Structure
 
-```
 sdplc/
 ├── Cargo.toml
 ├── README.md
@@ -132,7 +131,6 @@ sdplc/
     ├── parser_integration_test.rs
     ├── semantic_integration_test.rs
     └── codegen_integration_test.rs
-```
 
 ## Compiling to Native Code
 
