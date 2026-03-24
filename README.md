@@ -14,7 +14,7 @@ SD-PLC compiles IEC 61131-3 Structured Text programs through LLVM to produce nat
 | Parser / AST | ✅ Complete — recursive descent with precedence climbing |
 | Semantic Analysis | ✅ Complete — type resolution, scope validation, LLVM type mapping |
 | LLVM IR Generation | ✅ Complete — inkwell codegen for all ST constructs |
-| Runtime | 🔲 Next — deterministic scan cycle executor |
+| Runtime | ✅ Complete — JIT scan cycle executor with terminal dashboard |
 | OPC UA | 🔲 Planned |
 
 ### Target Architectures
@@ -26,44 +26,6 @@ SD-PLC compiles IEC 61131-3 Structured Text programs through LLVM to produce nat
 | Raspberry Pi 4 | ARMv8-A (Cortex-A72) | Tier 1 |
 | Nuvoton NUC980 | ARMv5TE (ARM926EJ-S) | Tier 2 |
 
-## Prerequisites
-
-### Rust Toolchain
-
-Install via [rustup](https://rustup.rs/):
-
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-### LLVM 17
-
-The `inkwell` crate requires LLVM 17 development libraries.
-
-**Ubuntu / Debian:**
-
-```bash
-wget https://apt.llvm.org/llvm.sh
-chmod +x llvm.sh
-sudo ./llvm.sh 17
-sudo apt install llvm-17-dev libpolly-17-dev
-```
-
-**macOS (Homebrew):**
-
-```bash
-brew install llvm@17
-```
-
-**Windows:**
-
-The project looks for LLVM 17 at the path configured in `.cargo/config.toml`. Update the path if your installation differs:
-
-```toml
-# .cargo/config.toml
-[env]
-LLVM_SYS_170_PREFIX = "C:\\Users\\kajwa\\Development\\llvm-install"
-```
 
 ## Building
 
@@ -73,33 +35,70 @@ cargo build
 
 ## Running
 
-The binary currently runs the lexer against a sample Conveyor Control program and prints the token table:
+Compile a Structured Text file:
 
 ```bash
-cargo run
+# Compile an ST file → output.ll + output.bc
+sdplc programs/hello.st
+
+# Custom output name
+sdplc programs/pid_controller.st -o build/pid
+
+# Print LLVM IR to stdout (useful for piping to llc)
+sdplc programs/flotation_column.st --emit-ir
+
+# Quiet mode (errors only)
+sdplc -q programs/hello.st
+
+# Run built-in demo (no arguments)
+sdplc
 ```
 
-## Testing
+### Example Programs
 
-Unit tests are embedded in `src/lexer.rs`. Integration tests live in `tests/`.
+The `examples/` directory contains ready-to-compile ST programs:
+
+| File | Description |
+|------|-------------|
+| `hello.st` | Minimal counter program — start here |
+| `pid_controller.st` | PID function block with anti-windup |
+| `multi_pou.st` | Functions, FBs, and programs in one file |
+| `all_control_flow.st` | Every ST control flow construct |
+| `flotation_column.st` | Rougher flotation column — thesis validation target |
+
+## Runtime (Live Execution)
+
+The runtime JIT-compiles an ST program and executes it in a deterministic scan cycle loop with a live terminal dashboard:
 
 ```bash
-# Run all tests
-cargo test
+# Run with default 100ms scan cycle
+cargo run --bin runtime -- programs/hello.st
 
-# Run only unit tests
-cargo test --lib
+# 50ms scan cycle
+cargo run --bin runtime -- programs/flotation_column.st --scan-time=50
 
-# Run only integration tests
-cargo test --test lexer_integration_test
+# Run exactly 500 cycles then stop
+cargo run --bin runtime -- programs/hello.st --cycles=500
+
+# Quiet mode (summary only)
+cargo run --bin runtime -- programs/hello.st --cycles=100 -q
 ```
 
-## Documentation
+The dashboard shows all PROGRAM variables updating in real time:
 
-Generate and open HTML documentation (includes rustdoc examples):
+```
+══ SD-PLC Runtime ══  ConveyorControl  Scan: 100ms  Cycle: #347
+   Uptime: 34.7s  Exec: 1.2µs  Jitter avg: 0.3µs  max: 12.1µs
 
-```bash
-cargo doc --open
+ Variable                 Type           Value
+ ──────────────────────────────────────────────────
+ speed                    REAL          67.3200
+ running                  BOOL            TRUE
+ count                    INT              347
+ limit                    INT             1000
+ i                        INT                8
+```
+
 ```
 
 ## Project Structure
@@ -108,19 +107,31 @@ cargo doc --open
 sdplc/
 ├── Cargo.toml
 ├── README.md
+├── docs/
+│   ├── developer_guide.md          # Codebase walkthrough with line numbers
+│   └── multi_language_design.md    # Design: LD/FBD/SFC via PLCopen XML
+├── examples/
+│   ├── hello.st                    # Minimal program
+│   ├── pid_controller.st           # PID function block
+│   ├── multi_pou.st               # Multiple POUs in one file
+│   ├── all_control_flow.st        # Every control flow construct
+│   └── flotation_column.st        # Thesis validation target
+├── programs/                       # YOUR working .st files
 ├── src/
+│   ├── main.rs         # CLI compiler driver (sdplc binary)
+│   ├── bin/
+│   │   └── runtime.rs  # JIT scan cycle executor (runtime binary)
 │   ├── lib.rs          # Crate root — exports modules
-│   ├── main.rs         # CLI entry point (4-stage compiler demo)
 │   ├── ast.rs          # AST node definitions
 │   ├── codegen.rs      # LLVM IR generation via inkwell
 │   ├── lexer.rs        # IEC 61131-3 ST lexer
 │   ├── parser.rs       # Recursive descent parser
 │   └── semantic.rs     # Type resolution, scope validation, type checking
 └── tests/
-    ├── lexer_integration_test.rs      # Full-program lexer tests
-    ├── parser_integration_test.rs     # Full-program parser tests
-    ├── semantic_integration_test.rs   # Type checking / validation tests
-    └── codegen_integration_test.rs    # LLVM IR output verification tests
+    ├── lexer_integration_test.rs
+    ├── parser_integration_test.rs
+    ├── semantic_integration_test.rs
+    └── codegen_integration_test.rs
 ```
 
 ## Compiling to Native Code
@@ -143,7 +154,7 @@ llc output.ll -mtriple=armv5te-linux-gnueabi -o output_armv5.s
 llc output.ll -mtriple=wasm32-unknown-unknown -o output.wasm
 ```
 
-This is the thesis claim made concrete: the **same Structured Text source** compiles to native binaries for all four target architectures through a single LLVM IR representation.
+**Same Structured Text source** compiles to native binaries for all four target architectures through a single LLVM IR representation.
 
 ## Compilation Pipeline
 
@@ -176,3 +187,4 @@ IEC 61131-3 ST Source
   Native    WebAssembly
   (x86,     (portable,
    ARM)      sandboxed)
+```

@@ -1,1 +1,7 @@
 /target
+output.bc
+output.ll
+control_flow.bc
+control_flow.ll
+demo.bc
+demo.ll

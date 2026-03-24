@@ -73,6 +73,22 @@ struct VarSlot<'ctx> {
     llvm_type: BasicTypeEnum<'ctx>,
 }
 
+// ─── Runtime Variable Metadata ──────────────────────────────────
+
+/// Metadata for a variable exposed to the runtime.
+///
+/// The runtime uses this to know which getter/setter functions
+/// exist and how to format the values for display.
+#[derive(Debug, Clone)]
+pub struct RuntimeVar {
+    /// The variable name as declared in ST.
+    pub name: String,
+    /// The resolved type (for formatting).
+    pub resolved_type: ResolvedType,
+    /// The name of the PROGRAM this variable belongs to.
+    pub program_name: String,
+}
+
 // ─── Code Generator ─────────────────────────────────────────────
 
 /// LLVM IR code generator for IEC 61131-3 Structured Text.
@@ -1274,6 +1290,166 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
 
         val
+    }
+
+    // ── Runtime compilation ─────────────────────────────────────
+    //
+    // These methods compile a PROGRAM for JIT execution in a scan
+    // cycle loop. Variables become LLVM module-level globals that
+    // persist across calls. Three functions are emitted per PROGRAM:
+    //
+    //   @__init_<Name>()        — stores initial values (call once)
+    //   @__scan_<Name>()        — executes one scan cycle (call in loop)
+    //   @__get_<var>() -> f64   — reads a variable as f64 (call to display)
+
+    /// Compiles a compilation unit for runtime JIT execution.
+    ///
+    /// Unlike [`compile`](Self::compile) which uses stack allocas,
+    /// this method stores PROGRAM variables as module-level globals
+    /// so they persist across repeated scan cycle calls.
+    ///
+    /// Returns a list of [`RuntimeVar`] describing the exposed
+    /// variables, which the runtime uses to call the getter functions
+    /// and display values.
+    pub fn compile_for_runtime(&mut self, unit: &CompilationUnit) -> CgResult<Vec<RuntimeVar>> {
+        let mut runtime_vars = Vec::new();
+
+        // Pass 1: Declare all FUNCTION signatures so they can be called
+        for pou in &unit.units {
+            if let Pou::Function(_) = pou {
+                self.declare_pou(pou)?;
+            }
+        }
+
+        // Pass 2: Compile each PROGRAM for runtime execution
+        for pou in &unit.units {
+            if let Pou::Program(p) = pou {
+                let vars = self.compile_program_for_runtime(p)?;
+                runtime_vars.extend(vars);
+            }
+        }
+
+        // Pass 3: Emit FUNCTION bodies (they use normal allocas — stateless)
+        for pou in &unit.units {
+            if let Pou::Function(_) = pou {
+                self.emit_pou(pou)?;
+            }
+        }
+
+        Ok(runtime_vars)
+    }
+
+    /// Compiles a single PROGRAM for runtime execution.
+    fn compile_program_for_runtime(&mut self, p: &ProgramDecl) -> CgResult<Vec<RuntimeVar>> {
+        self.variables.clear();
+        let mut runtime_vars = Vec::new();
+
+        // ── Step 1: Create LLVM globals for each variable ──
+        for block in &p.var_blocks {
+            for decl in &block.declarations {
+                let rt = Self::resolve_type(&decl.type_spec);
+                let lt = self.llvm_type(&rt);
+
+                let global = self.module.add_global(lt, None, &decl.name);
+                global.set_initializer(&lt.const_zero());
+
+                self.variables.insert(decl.name.clone(), VarSlot {
+                    ptr: global.as_pointer_value(),
+                    resolved_type: rt.clone(),
+                    llvm_type: lt,
+                });
+
+                runtime_vars.push(RuntimeVar {
+                    name: decl.name.clone(),
+                    resolved_type: rt,
+                    program_name: p.name.clone(),
+                });
+            }
+        }
+
+        // ── Step 2: Emit __init_<Name>() — stores initial values ──
+        let init_name = format!("__init_{}", p.name);
+        let void_fn_ty = self.context.void_type().fn_type(&[], false);
+        let init_fn = self.module.add_function(&init_name, void_fn_ty, None);
+        let entry = self.context.append_basic_block(init_fn, "entry");
+        self.builder.position_at_end(entry);
+        self.current_fn = Some(init_fn);
+
+        for block in &p.var_blocks {
+            for decl in &block.declarations {
+                if let Some(ref init_expr) = decl.initial_value {
+                    let val = self.emit_expression(init_expr)?;
+                    let slot = self.variables[&decl.name].clone();
+                    let coerced = self.coerce_value(val, &slot.resolved_type);
+                    self.builder.build_store(slot.ptr, coerced).unwrap();
+                }
+            }
+        }
+        self.builder.build_return(None).unwrap();
+
+        // ── Step 3: Emit __scan_<Name>() — one scan cycle ──
+        let scan_name = format!("__scan_{}", p.name);
+        let scan_fn = self.module.add_function(&scan_name, void_fn_ty, None);
+        let entry = self.context.append_basic_block(scan_fn, "entry");
+        self.builder.position_at_end(entry);
+        self.current_fn = Some(scan_fn);
+
+        self.emit_statements(&p.body)?;
+        if self.needs_terminator() {
+            self.builder.build_return(None).unwrap();
+        }
+
+        // ── Step 4: Emit getter functions ──
+        //
+        // Each getter loads the global and converts to f64 so the
+        // runtime can read all variables with one uniform type.
+        for var in &runtime_vars {
+            self.emit_runtime_getter(&var.name, &var.resolved_type)?;
+        }
+
+        self.current_fn = None;
+        Ok(runtime_vars)
+    }
+
+    /// Emits `@__get_<name>() -> f64` that reads a global and
+    /// returns it as a double.
+    fn emit_runtime_getter(&mut self, name: &str, rt: &ResolvedType) -> CgResult<()> {
+        let f64_type = self.context.f64_type();
+        let fn_type = f64_type.fn_type(&[], false);
+        let fn_name = format!("__get_{}", name);
+        let function = self.module.add_function(&fn_name, fn_type, None);
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        let slot = self.variables[name].clone();
+        let raw = self.builder.build_load(slot.llvm_type, slot.ptr, "val").unwrap();
+
+        let as_f64 = match rt {
+            ResolvedType::Float { bits: 64 } => raw.into_float_value(),
+            ResolvedType::Float { .. } => {
+                self.builder.build_float_ext(raw.into_float_value(), f64_type, "fext").unwrap()
+            }
+            ResolvedType::Bool => {
+                self.builder.build_unsigned_int_to_float(
+                    raw.into_int_value(), f64_type, "btof"
+                ).unwrap()
+            }
+            _ if rt.is_integer() => {
+                if rt.is_signed() {
+                    self.builder.build_signed_int_to_float(
+                        raw.into_int_value(), f64_type, "itof"
+                    ).unwrap()
+                } else {
+                    self.builder.build_unsigned_int_to_float(
+                        raw.into_int_value(), f64_type, "utof"
+                    ).unwrap()
+                }
+            }
+            _ => f64_type.const_float(0.0),
+        };
+
+        self.builder.build_return(Some(&as_f64)).unwrap();
+        Ok(())
     }
 }
 
