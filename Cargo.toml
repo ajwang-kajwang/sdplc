@@ -5,3 +5,15 @@ edition = "2024"
 
 [dependencies]
 inkwell = { version = "0.4.0", features = ["llvm17-0"] }
+
+[[bin]]
+name = "sdplc"
+path = "src/main.rs"
+
+[[bin]]
+name = "runtime"
+path = "src/runtime.rs"
+
+[[bin]]
+name = "validate_sim"
+path = "src/bin/validate_sim.rs"
