@@ -17,18 +17,6 @@
 //! - Control flow (IF, FOR, WHILE, REPEAT, CASE) maps to basic
 //!   blocks with conditional/unconditional branches.
 //!
-//! ## Usage
-//!
-//! ```ignore
-//! use sdplc::codegen::CodeGenerator;
-//! use inkwell::context::Context;
-//!
-//! let context = Context::create();
-//! let mut codegen = CodeGenerator::new(&context, "my_module");
-//! codegen.compile(&ast);
-//! codegen.print_ir(); // dumps LLVM IR to stdout
-//! codegen.write_bitcode("output.bc"); // write bitcode file
-//! ```
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -38,7 +26,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
-use inkwell::values::{BasicValue, BasicValueEnum, FunctionValue, IntValue, FloatValue, PointerValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, IntValue, FloatValue, PointerValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use crate::ast::*;
@@ -46,7 +34,7 @@ use crate::semantic::ResolvedType;
 
 // ─── Codegen Error ──────────────────────────────────────────────
 
-/// An error encountered during code generation.
+/// For errors encountered during code generation.
 #[derive(Debug)]
 pub struct CodegenError {
     pub message: String,
@@ -1256,9 +1244,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 if fv.get_type() == ft {
                     return val;
                 }
-                if fv.get_type().get_bit_size() < ft.get_bit_size() {
+                // If it is f32 (and doesn't match the target), we must be extending to f64
+                if fv.get_type() == self.context.f32_type() {
                     return self.builder.build_float_ext(fv, ft, "fext").unwrap().into();
                 } else {
+                    // Otherwise, we are truncating from f64 down to f32
                     return self.builder.build_float_trunc(fv, ft, "ftrunc").unwrap().into();
                 }
             }

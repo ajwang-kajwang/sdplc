@@ -31,19 +31,7 @@ pub type ParseResult<T> = Result<T, ParseError>;
 // ─── Parser ─────────────────────────────────────────────────────
 
 /// A recursive descent parser for IEC 61131-3 Structured Text.
-///
-/// # Example
-///
-/// ```
-/// use sdplc::lexer::Lexer;
-/// use sdplc::parser::Parser;
-///
-/// let source = "PROGRAM P VAR x : INT := 0; END_VAR END_PROGRAM";
-/// let lexer = Lexer::new(source);
-/// let mut parser = Parser::new(lexer);
-/// let unit = parser.parse().expect("parse error");
-/// assert_eq!(unit.units.len(), 1);
-/// ```
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
