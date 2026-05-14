@@ -78,9 +78,11 @@ fn main() {
         }
         None => {
             if !quiet {
-                eprintln!("No input file — running built-in demo.\n\
+                eprintln!(
+                    "No input file — running built-in demo.\n\
                            Use 'sdplc <file.st>' to compile a file.\n\
-                           Use 'sdplc --help' for all options.\n");
+                           Use 'sdplc --help' for all options.\n"
+                );
             }
             (DEMO_PROGRAM.to_string(), "demo".to_string())
         }
@@ -99,7 +101,8 @@ fn main() {
     // ── Stage 1: Lexing ──
     let mut token_lexer = Lexer::new(&source_code);
     let tokens = token_lexer.tokenize();
-    let unknown_count = tokens.iter()
+    let unknown_count = tokens
+        .iter()
         .filter(|t| t.kind == TokenType::Unknown)
         .count();
 
@@ -114,7 +117,9 @@ fn main() {
         }
         process::exit(1);
     }
-    if !quiet { println!("  ✓ Complete.\n"); }
+    if !quiet {
+        println!("  ✓ Complete.\n");
+    }
 
     // ── Stage 2: Parsing ──
     let lexer = Lexer::new(&source_code);
@@ -138,7 +143,11 @@ fn main() {
 
     if !quiet {
         println!("Stage 3 — Semantic Analysis");
-        println!("  {} error(s), {} warning(s)", sem_ctx.error_count(), sem_ctx.warning_count());
+        println!(
+            "  {} error(s), {} warning(s)",
+            sem_ctx.error_count(),
+            sem_ctx.warning_count()
+        );
     }
     for d in &sem_ctx.diagnostics {
         if !quiet || d.severity == semantic::Severity::Error {
@@ -149,7 +158,9 @@ fn main() {
         eprintln!("Compilation aborted.");
         process::exit(1);
     }
-    if !quiet { println!("  ✓ Complete.\n"); }
+    if !quiet {
+        println!("  ✓ Complete.\n");
+    }
 
     // ── Stage 4: LLVM IR Generation ──
     let llvm_context = Context::create();
@@ -171,26 +182,61 @@ fn main() {
             // Write output files
             let ll_path = format!("{}.ll", out_base);
             let bc_path = format!("{}.bc", out_base);
+            if let Some(parent) = Path::new(&ll_path).parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(parent).unwrap_or_else(|e| {
+                        eprintln!(
+                            "  ✗ Failed to create output directory {}: {}",
+                            parent.display(),
+                            e
+                        );
+                        process::exit(1);
+                    });
+                }
+            }
 
             match codegen.write_ir(&ll_path) {
                 Ok(()) => {
-                    if !quiet { println!("  → {}", ll_path); }
+                    if !quiet {
+                        println!("  → {}", ll_path);
+                    }
                 }
-                Err(e) => eprintln!("  ✗ Failed to write {}: {}", ll_path, e),
+                Err(e) => {
+                    eprintln!("  ✗ Failed to write {}: {}", ll_path, e);
+                    process::exit(1);
+                }
             }
             if codegen.write_bitcode(&bc_path) {
-                if !quiet { println!("  → {}", bc_path); }
+                if !quiet {
+                    println!("  → {}", bc_path);
+                }
+            } else {
+                eprintln!("  ✗ Failed to write {}", bc_path);
+                process::exit(1);
             }
 
             if !quiet {
                 println!("\n── Cross-Compilation ──");
-                println!("  x86_64:     llc {ll} -o {base}.s", ll = ll_path, base = out_base);
-                println!("  ARMv8:      llc {ll} -mtriple=aarch64-linux-gnu -o {base}_arm64.s",
-                    ll = ll_path, base = out_base);
-                println!("  ARMv5TE:    llc {ll} -mtriple=armv5te-linux-gnueabi -o {base}_armv5.s",
-                    ll = ll_path, base = out_base);
-                println!("  WebAssembly: llc {ll} -mtriple=wasm32-unknown-unknown -o {base}.wasm",
-                    ll = ll_path, base = out_base);
+                println!(
+                    "  x86_64:     llc {ll} -o {base}.s",
+                    ll = ll_path,
+                    base = out_base
+                );
+                println!(
+                    "  ARMv8:      llc {ll} -mtriple=aarch64-linux-gnu -o {base}_arm64.s",
+                    ll = ll_path,
+                    base = out_base
+                );
+                println!(
+                    "  ARMv5TE:    llc {ll} -mtriple=armv5te-linux-gnueabi -o {base}_armv5.s",
+                    ll = ll_path,
+                    base = out_base
+                );
+                println!(
+                    "  WebAssembly: llc {ll} -mtriple=wasm32-unknown-unknown -o {base}.wasm",
+                    ll = ll_path,
+                    base = out_base
+                );
             }
         }
         Err(e) => {

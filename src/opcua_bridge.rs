@@ -41,7 +41,10 @@ impl OpcUaAddressSpace {
             })
             .collect();
 
-        Self { namespace_uri, nodes }
+        Self {
+            namespace_uri,
+            nodes,
+        }
     }
 
     pub fn namespace_uri(&self) -> &str {
@@ -97,7 +100,7 @@ pub trait OpcUaServerBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::process_image::{ProcessVariable, PlcValue};
+    use crate::process_image::{PlcValue, ProcessVariable};
 
     #[test]
     fn address_space_maps_process_variables() {
@@ -107,6 +110,10 @@ mod tests {
 
         let address_space = OpcUaAddressSpace::from_process_image("urn:sdplc:test", &image);
         assert_eq!(address_space.nodes().len(), 2);
-        assert!(address_space.nodes()[0].node_id.starts_with("ns=2;s=SDPLC."));
+        assert!(
+            address_space.nodes()[0]
+                .node_id
+                .starts_with("ns=2;s=SDPLC.")
+        );
     }
 }

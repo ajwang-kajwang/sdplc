@@ -35,23 +35,60 @@ impl Default for FlotationTankSim {
 impl FlotationTankSim {
     pub fn seed_process_image(&self) -> ProcessImage {
         let mut image = ProcessImage::new();
-        image.insert(ProcessVariable::new("tank.level", PlcValue::F64(self.level)).with_description("Tank level percentage"));
-        image.insert(ProcessVariable::new("tank.air_flow", PlcValue::F64(self.air_flow)).with_description("Air flow percentage"));
-        image.insert(ProcessVariable::new("tank.feed_flow", PlcValue::F64(self.feed_flow)).with_description("Feed flow percentage"));
-        image.insert(ProcessVariable::new("tank.tailings_flow", PlcValue::F64(self.tailings_flow)).with_description("Tailings flow percentage"));
-        image.insert(ProcessVariable::new("tank.concentrate_grade", PlcValue::F64(self.concentrate_grade)).read_only().with_description("Simulated concentrate grade"));
-        image.insert(ProcessVariable::new("tank.emergency_stop", PlcValue::Bool(self.emergency_stop)).with_description("Emergency stop input"));
-        image.insert(ProcessVariable::new("tank.motor_running", PlcValue::Bool(self.motor_running)).with_description("Agitator/motor command"));
+        image.insert(
+            ProcessVariable::new("tank.level", PlcValue::F64(self.level))
+                .with_description("Tank level percentage"),
+        );
+        image.insert(
+            ProcessVariable::new("tank.air_flow", PlcValue::F64(self.air_flow))
+                .with_description("Air flow percentage"),
+        );
+        image.insert(
+            ProcessVariable::new("tank.feed_flow", PlcValue::F64(self.feed_flow))
+                .with_description("Feed flow percentage"),
+        );
+        image.insert(
+            ProcessVariable::new("tank.tailings_flow", PlcValue::F64(self.tailings_flow))
+                .with_description("Tailings flow percentage"),
+        );
+        image.insert(
+            ProcessVariable::new(
+                "tank.concentrate_grade",
+                PlcValue::F64(self.concentrate_grade),
+            )
+            .read_only()
+            .with_description("Simulated concentrate grade"),
+        );
+        image.insert(
+            ProcessVariable::new("tank.emergency_stop", PlcValue::Bool(self.emergency_stop))
+                .with_description("Emergency stop input"),
+        );
+        image.insert(
+            ProcessVariable::new("tank.motor_running", PlcValue::Bool(self.motor_running))
+                .with_description("Agitator/motor command"),
+        );
         image
     }
 
     pub fn load_from_image(&mut self, image: &ProcessImage) {
-        if let Some(v) = image.get_f64("tank.level") { self.level = v; }
-        if let Some(v) = image.get_f64("tank.air_flow") { self.air_flow = v; }
-        if let Some(v) = image.get_f64("tank.feed_flow") { self.feed_flow = v; }
-        if let Some(v) = image.get_f64("tank.tailings_flow") { self.tailings_flow = v; }
-        if let Some(v) = image.get_bool("tank.emergency_stop") { self.emergency_stop = v; }
-        if let Some(v) = image.get_bool("tank.motor_running") { self.motor_running = v; }
+        if let Some(v) = image.get_f64("tank.level") {
+            self.level = v;
+        }
+        if let Some(v) = image.get_f64("tank.air_flow") {
+            self.air_flow = v;
+        }
+        if let Some(v) = image.get_f64("tank.feed_flow") {
+            self.feed_flow = v;
+        }
+        if let Some(v) = image.get_f64("tank.tailings_flow") {
+            self.tailings_flow = v;
+        }
+        if let Some(v) = image.get_bool("tank.emergency_stop") {
+            self.emergency_stop = v;
+        }
+        if let Some(v) = image.get_bool("tank.motor_running") {
+            self.motor_running = v;
+        }
     }
 
     /// Advance plant state by one scan period.

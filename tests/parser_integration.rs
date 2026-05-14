@@ -10,7 +10,9 @@ use sdplc::parser::Parser;
 fn parse_ok(src: &str) -> CompilationUnit {
     let lexer = Lexer::new(src);
     let mut parser = Parser::new(lexer);
-    parser.parse().unwrap_or_else(|e| panic!("Parse error: {}", e))
+    parser
+        .parse()
+        .unwrap_or_else(|e| panic!("Parse error: {}", e))
 }
 
 #[test]

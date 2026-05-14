@@ -59,7 +59,10 @@ impl Parser {
     /// Returns a Span for the current token.
     fn span(&self) -> Span {
         let t = self.current();
-        Span { line: t.line, col: t.col }
+        Span {
+            line: t.line,
+            col: t.col,
+        }
     }
 
     /// Advances to the next token and returns the consumed token.
@@ -118,12 +121,16 @@ impl Parser {
             match self.current_kind() {
                 TokenType::Program => units.push(Pou::Program(self.parse_program()?)),
                 TokenType::Function => units.push(Pou::Function(self.parse_function()?)),
-                TokenType::FunctionBlock => units.push(Pou::FunctionBlock(self.parse_function_block()?)),
-                _ => return Err(self.error(format!(
-                    "expected PROGRAM, FUNCTION, or FUNCTION_BLOCK, found {:?} '{}'",
-                    self.current_kind(),
-                    self.current().text
-                ))),
+                TokenType::FunctionBlock => {
+                    units.push(Pou::FunctionBlock(self.parse_function_block()?))
+                }
+                _ => {
+                    return Err(self.error(format!(
+                        "expected PROGRAM, FUNCTION, or FUNCTION_BLOCK, found {:?} '{}'",
+                        self.current_kind(),
+                        self.current().text
+                    )));
+                }
             }
         }
 
@@ -138,7 +145,12 @@ impl Parser {
         let var_blocks = self.parse_var_blocks()?;
         let body = self.parse_statement_list(&[TokenType::EndProgram])?;
         self.expect(TokenType::EndProgram)?;
-        Ok(ProgramDecl { name, var_blocks, body, span })
+        Ok(ProgramDecl {
+            name,
+            var_blocks,
+            body,
+            span,
+        })
     }
 
     /// `FUNCTION name : return_type {var_blocks} {statements} END_FUNCTION`
@@ -151,7 +163,13 @@ impl Parser {
         let var_blocks = self.parse_var_blocks()?;
         let body = self.parse_statement_list(&[TokenType::EndFunction])?;
         self.expect(TokenType::EndFunction)?;
-        Ok(FunctionDecl { name, return_type, var_blocks, body, span })
+        Ok(FunctionDecl {
+            name,
+            return_type,
+            var_blocks,
+            body,
+            span,
+        })
     }
 
     /// `FUNCTION_BLOCK name {var_blocks} {statements} END_FUNCTION_BLOCK`
@@ -162,7 +180,12 @@ impl Parser {
         let var_blocks = self.parse_var_blocks()?;
         let body = self.parse_statement_list(&[TokenType::EndFunctionBlock])?;
         self.expect(TokenType::EndFunctionBlock)?;
-        Ok(FunctionBlockDecl { name, var_blocks, body, span })
+        Ok(FunctionBlockDecl {
+            name,
+            var_blocks,
+            body,
+            span,
+        })
     }
 
     // ── Variable declarations ───────────────────────────────────
@@ -172,13 +195,13 @@ impl Parser {
         let mut blocks = Vec::new();
         loop {
             let qualifier = match self.current_kind() {
-                TokenType::Var         => VarQualifier::Var,
-                TokenType::VarInput    => VarQualifier::VarInput,
-                TokenType::VarOutput   => VarQualifier::VarOutput,
-                TokenType::VarInOut    => VarQualifier::VarInOut,
-                TokenType::VarGlobal   => VarQualifier::VarGlobal,
+                TokenType::Var => VarQualifier::Var,
+                TokenType::VarInput => VarQualifier::VarInput,
+                TokenType::VarOutput => VarQualifier::VarOutput,
+                TokenType::VarInOut => VarQualifier::VarInOut,
+                TokenType::VarGlobal => VarQualifier::VarGlobal,
                 TokenType::VarExternal => VarQualifier::VarExternal,
-                TokenType::VarTemp     => VarQualifier::VarTemp,
+                TokenType::VarTemp => VarQualifier::VarTemp,
                 _ => break,
             };
             blocks.push(self.parse_var_block(qualifier)?);
@@ -200,7 +223,13 @@ impl Parser {
         }
         self.expect(TokenType::EndVar)?;
 
-        Ok(VarBlock { qualifier, retain, constant, declarations, span })
+        Ok(VarBlock {
+            qualifier,
+            retain,
+            constant,
+            declarations,
+            span,
+        })
     }
 
     /// Parses a single declaration: `name : type_spec [:= init_value] ;`
@@ -217,7 +246,12 @@ impl Parser {
         };
 
         self.expect(TokenType::SemiColon)?;
-        Ok(VarDecl { name, type_spec, initial_value, span })
+        Ok(VarDecl {
+            name,
+            type_spec,
+            initial_value,
+            span,
+        })
     }
 
     // ── Type specifications ─────────────────────────────────────
@@ -286,31 +320,34 @@ impl Parser {
         self.expect(TokenType::Of)?;
         let element_type = Box::new(self.parse_type_spec()?);
 
-        Ok(TypeSpec::Array { ranges, element_type })
+        Ok(TypeSpec::Array {
+            ranges,
+            element_type,
+        })
     }
 
     /// Tries to map the current token to an ElementaryType.
     fn try_elementary_type(&self) -> Option<ElementaryType> {
         match self.current_kind() {
-            TokenType::TypeBool  => Some(ElementaryType::Bool),
-            TokenType::TypeSint  => Some(ElementaryType::Sint),
-            TokenType::TypeInt   => Some(ElementaryType::Int),
-            TokenType::TypeDint  => Some(ElementaryType::Dint),
-            TokenType::TypeLint  => Some(ElementaryType::Lint),
+            TokenType::TypeBool => Some(ElementaryType::Bool),
+            TokenType::TypeSint => Some(ElementaryType::Sint),
+            TokenType::TypeInt => Some(ElementaryType::Int),
+            TokenType::TypeDint => Some(ElementaryType::Dint),
+            TokenType::TypeLint => Some(ElementaryType::Lint),
             TokenType::TypeUsint => Some(ElementaryType::Usint),
-            TokenType::TypeUint  => Some(ElementaryType::Uint),
+            TokenType::TypeUint => Some(ElementaryType::Uint),
             TokenType::TypeUdint => Some(ElementaryType::Udint),
             TokenType::TypeUlint => Some(ElementaryType::Ulint),
-            TokenType::TypeReal  => Some(ElementaryType::Real),
+            TokenType::TypeReal => Some(ElementaryType::Real),
             TokenType::TypeLreal => Some(ElementaryType::Lreal),
-            TokenType::TypeByte  => Some(ElementaryType::Byte),
-            TokenType::TypeWord  => Some(ElementaryType::Word),
+            TokenType::TypeByte => Some(ElementaryType::Byte),
+            TokenType::TypeWord => Some(ElementaryType::Word),
             TokenType::TypeDword => Some(ElementaryType::Dword),
             TokenType::TypeLword => Some(ElementaryType::Lword),
-            TokenType::TypeTime  => Some(ElementaryType::Time),
-            TokenType::TypeDate  => Some(ElementaryType::Date),
-            TokenType::TypeTod   => Some(ElementaryType::Tod),
-            TokenType::TypeDt    => Some(ElementaryType::Dt),
+            TokenType::TypeTime => Some(ElementaryType::Time),
+            TokenType::TypeDate => Some(ElementaryType::Date),
+            TokenType::TypeTod => Some(ElementaryType::Tod),
+            TokenType::TypeDt => Some(ElementaryType::Dt),
             _ => None,
         }
     }
@@ -357,12 +394,12 @@ impl Parser {
         }
 
         match self.current_kind() {
-            TokenType::If     => self.parse_if(),
-            TokenType::For    => self.parse_for(),
-            TokenType::While  => self.parse_while(),
+            TokenType::If => self.parse_if(),
+            TokenType::For => self.parse_for(),
+            TokenType::While => self.parse_while(),
             TokenType::Repeat => self.parse_repeat(),
-            TokenType::Case   => self.parse_case(),
-            TokenType::Exit   => {
+            TokenType::Case => self.parse_case(),
+            TokenType::Exit => {
                 let span = self.span();
                 self.advance();
                 self.expect(TokenType::SemiColon)?;
@@ -387,7 +424,11 @@ impl Parser {
         if self.eat(TokenType::Assignment) {
             let value = self.parse_expression()?;
             self.expect(TokenType::SemiColon)?;
-            Ok(Statement::Assignment { target, value, span })
+            Ok(Statement::Assignment {
+                target,
+                value,
+                span,
+            })
         } else {
             // Bare expression statement — should be a function call
             self.expect(TokenType::SemiColon)?;
@@ -418,17 +459,15 @@ impl Parser {
         let condition = self.parse_expression()?;
         self.expect(TokenType::Then)?;
 
-        let then_body = self.parse_statement_list(&[
-            TokenType::Elsif, TokenType::Else, TokenType::EndIf,
-        ])?;
+        let then_body =
+            self.parse_statement_list(&[TokenType::Elsif, TokenType::Else, TokenType::EndIf])?;
 
         let mut elsif_branches = Vec::new();
         while self.eat(TokenType::Elsif) {
             let cond = self.parse_expression()?;
             self.expect(TokenType::Then)?;
-            let body = self.parse_statement_list(&[
-                TokenType::Elsif, TokenType::Else, TokenType::EndIf,
-            ])?;
+            let body =
+                self.parse_statement_list(&[TokenType::Elsif, TokenType::Else, TokenType::EndIf])?;
             elsif_branches.push((cond, body));
         }
 
@@ -441,7 +480,13 @@ impl Parser {
         self.expect(TokenType::EndIf)?;
         self.expect(TokenType::SemiColon)?;
 
-        Ok(Statement::If { condition, then_body, elsif_branches, else_body, span })
+        Ok(Statement::If {
+            condition,
+            then_body,
+            elsif_branches,
+            else_body,
+            span,
+        })
     }
 
     /// `FOR var := from TO to [BY step] DO stmts END_FOR ;`
@@ -465,7 +510,14 @@ impl Parser {
         self.expect(TokenType::EndFor)?;
         self.expect(TokenType::SemiColon)?;
 
-        Ok(Statement::For { variable, from, to, by, body, span })
+        Ok(Statement::For {
+            variable,
+            from,
+            to,
+            by,
+            body,
+            span,
+        })
     }
 
     /// `WHILE cond DO stmts END_WHILE ;`
@@ -477,7 +529,11 @@ impl Parser {
         let body = self.parse_statement_list(&[TokenType::EndWhile])?;
         self.expect(TokenType::EndWhile)?;
         self.expect(TokenType::SemiColon)?;
-        Ok(Statement::While { condition, body, span })
+        Ok(Statement::While {
+            condition,
+            body,
+            span,
+        })
     }
 
     /// `REPEAT stmts UNTIL cond END_REPEAT ;`
@@ -489,7 +545,11 @@ impl Parser {
         let condition = self.parse_expression()?;
         self.expect(TokenType::EndRepeat)?;
         self.expect(TokenType::SemiColon)?;
-        Ok(Statement::Repeat { body, condition, span })
+        Ok(Statement::Repeat {
+            body,
+            condition,
+            span,
+        })
     }
 
     /// `CASE selector OF {labels : stmts} [ELSE stmts] END_CASE ;`
@@ -516,7 +576,12 @@ impl Parser {
         self.expect(TokenType::EndCase)?;
         self.expect(TokenType::SemiColon)?;
 
-        Ok(Statement::Case { selector, branches, else_body, span })
+        Ok(Statement::Case {
+            selector,
+            branches,
+            else_body,
+            span,
+        })
     }
 
     /// Parses a single case branch: `label {, label} : stmts`
@@ -565,8 +630,12 @@ impl Parser {
             while lookahead < self.tokens.len() {
                 let tk = self.tokens[lookahead].kind;
                 match tk {
-                    TokenType::IntLiteral | TokenType::Ident | TokenType::Minus
-                    | TokenType::DotDot | TokenType::Comma | TokenType::Plus => {
+                    TokenType::IntLiteral
+                    | TokenType::Ident
+                    | TokenType::Minus
+                    | TokenType::DotDot
+                    | TokenType::Comma
+                    | TokenType::Plus => {
                         lookahead += 1;
                     }
                     TokenType::Colon => return true,
@@ -648,7 +717,7 @@ impl Parser {
         let mut left = self.parse_comparison_expr()?;
         loop {
             let op = match self.current_kind() {
-                TokenType::Equal    => BinaryOperator::Eq,
+                TokenType::Equal => BinaryOperator::Eq,
                 TokenType::NotEqual => BinaryOperator::Neq,
                 _ => break,
             };
@@ -669,9 +738,9 @@ impl Parser {
         let mut left = self.parse_add_expr()?;
         loop {
             let op = match self.current_kind() {
-                TokenType::Less      => BinaryOperator::Lt,
-                TokenType::LessEq    => BinaryOperator::Le,
-                TokenType::Greater   => BinaryOperator::Gt,
+                TokenType::Less => BinaryOperator::Lt,
+                TokenType::LessEq => BinaryOperator::Le,
+                TokenType::Greater => BinaryOperator::Gt,
                 TokenType::GreaterEq => BinaryOperator::Ge,
                 _ => break,
             };
@@ -692,7 +761,7 @@ impl Parser {
         let mut left = self.parse_mul_expr()?;
         loop {
             let op = match self.current_kind() {
-                TokenType::Plus  => BinaryOperator::Add,
+                TokenType::Plus => BinaryOperator::Add,
                 TokenType::Minus => BinaryOperator::Sub,
                 _ => break,
             };
@@ -713,9 +782,9 @@ impl Parser {
         let mut left = self.parse_power_expr()?;
         loop {
             let op = match self.current_kind() {
-                TokenType::Star  => BinaryOperator::Mul,
+                TokenType::Star => BinaryOperator::Mul,
                 TokenType::Slash => BinaryOperator::Div,
-                TokenType::Mod   => BinaryOperator::Mod,
+                TokenType::Mod => BinaryOperator::Mod,
                 _ => break,
             };
             let span = self.span();
@@ -851,7 +920,8 @@ impl Parser {
             TokenType::RealLiteral => {
                 self.advance();
                 let text = tok.text.replace('_', "");
-                let value: f64 = text.parse()
+                let value: f64 = text
+                    .parse()
                     .map_err(|_| self.error(format!("invalid real '{}'", tok.text)))?;
                 Ok(Expression::RealLiteral { value, span })
             }
@@ -864,29 +934,47 @@ impl Parser {
 
             TokenType::StringLiteral => {
                 self.advance();
-                Ok(Expression::StringLiteral { value: tok.text, span })
+                Ok(Expression::StringLiteral {
+                    value: tok.text,
+                    span,
+                })
             }
 
             TokenType::WStringLiteral => {
                 self.advance();
-                Ok(Expression::WStringLiteral { value: tok.text, span })
+                Ok(Expression::WStringLiteral {
+                    value: tok.text,
+                    span,
+                })
             }
 
             TokenType::TimeLiteral => {
                 self.advance();
-                Ok(Expression::TimeLiteral { text: tok.text, span })
+                Ok(Expression::TimeLiteral {
+                    text: tok.text,
+                    span,
+                })
             }
             TokenType::DateLiteral => {
                 self.advance();
-                Ok(Expression::DateLiteral { text: tok.text, span })
+                Ok(Expression::DateLiteral {
+                    text: tok.text,
+                    span,
+                })
             }
             TokenType::TodLiteral => {
                 self.advance();
-                Ok(Expression::TodLiteral { text: tok.text, span })
+                Ok(Expression::TodLiteral {
+                    text: tok.text,
+                    span,
+                })
             }
             TokenType::DtLiteral => {
                 self.advance();
-                Ok(Expression::DtLiteral { text: tok.text, span })
+                Ok(Expression::DtLiteral {
+                    text: tok.text,
+                    span,
+                })
             }
 
             TokenType::Ident => {
@@ -1003,9 +1091,8 @@ mod tests {
 
     #[test]
     fn test_multiple_vars() {
-        let unit = parse_ok(
-            "PROGRAM P VAR x : INT; y : REAL := 3.14; z : BOOL; END_VAR END_PROGRAM"
-        );
+        let unit =
+            parse_ok("PROGRAM P VAR x : INT; y : REAL := 3.14; z : BOOL; END_VAR END_PROGRAM");
         if let Pou::Program(p) = &unit.units[0] {
             assert_eq!(p.var_blocks[0].declarations.len(), 3);
         } else {
@@ -1015,12 +1102,14 @@ mod tests {
 
     #[test]
     fn test_array_var() {
-        let unit = parse_ok(
-            "PROGRAM P VAR a : ARRAY[0..9] OF DINT; END_VAR END_PROGRAM"
-        );
+        let unit = parse_ok("PROGRAM P VAR a : ARRAY[0..9] OF DINT; END_VAR END_PROGRAM");
         if let Pou::Program(p) = &unit.units[0] {
             let ts = &p.var_blocks[0].declarations[0].type_spec;
-            if let TypeSpec::Array { ranges, element_type } = ts {
+            if let TypeSpec::Array {
+                ranges,
+                element_type,
+            } = ts
+            {
                 assert_eq!(ranges[0].low, 0);
                 assert_eq!(ranges[0].high, 9);
                 assert_eq!(**element_type, TypeSpec::Elementary(ElementaryType::Dint));
@@ -1077,7 +1166,7 @@ mod tests {
     #[test]
     fn test_boolean_expression() {
         let unit = parse_ok(
-            "PROGRAM P VAR a : BOOL; b : BOOL; END_VAR a := b AND NOT a OR TRUE; END_PROGRAM"
+            "PROGRAM P VAR a : BOOL; b : BOOL; END_VAR a := b AND NOT a OR TRUE; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
             // Should parse as: (b AND (NOT a)) OR TRUE
@@ -1125,9 +1214,8 @@ mod tests {
 
     #[test]
     fn test_if_then() {
-        let unit = parse_ok(
-            "PROGRAM P VAR x : INT; END_VAR IF x > 0 THEN x := 0; END_IF; END_PROGRAM"
-        );
+        let unit =
+            parse_ok("PROGRAM P VAR x : INT; END_VAR IF x > 0 THEN x := 0; END_IF; END_PROGRAM");
         if let Pou::Program(p) = &unit.units[0] {
             if let Statement::If { then_body, .. } = &p.body[0] {
                 assert_eq!(then_body.len(), 1);
@@ -1144,10 +1232,15 @@ mod tests {
              IF x > 10 THEN x := 10; \
              ELSIF x > 5 THEN x := 5; \
              ELSIF x > 0 THEN x := 1; \
-             ELSE x := 0; END_IF; END_PROGRAM"
+             ELSE x := 0; END_IF; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
-            if let Statement::If { elsif_branches, else_body, .. } = &p.body[0] {
+            if let Statement::If {
+                elsif_branches,
+                else_body,
+                ..
+            } = &p.body[0]
+            {
                 assert_eq!(elsif_branches.len(), 2);
                 assert!(else_body.is_some());
             }
@@ -1158,10 +1251,13 @@ mod tests {
     fn test_for_loop() {
         let unit = parse_ok(
             "PROGRAM P VAR i : INT; s : INT; END_VAR \
-             FOR i := 0 TO 10 BY 2 DO s := s + i; END_FOR; END_PROGRAM"
+             FOR i := 0 TO 10 BY 2 DO s := s + i; END_FOR; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
-            if let Statement::For { variable, by, body, .. } = &p.body[0] {
+            if let Statement::For {
+                variable, by, body, ..
+            } = &p.body[0]
+            {
                 assert_eq!(variable, "i");
                 assert!(by.is_some());
                 assert_eq!(body.len(), 1);
@@ -1173,7 +1269,7 @@ mod tests {
     fn test_while_loop() {
         let unit = parse_ok(
             "PROGRAM P VAR x : INT; END_VAR \
-             WHILE x > 0 DO x := x - 1; END_WHILE; END_PROGRAM"
+             WHILE x > 0 DO x := x - 1; END_WHILE; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
             assert!(matches!(&p.body[0], Statement::While { .. }));
@@ -1184,7 +1280,7 @@ mod tests {
     fn test_repeat_loop() {
         let unit = parse_ok(
             "PROGRAM P VAR x : INT; END_VAR \
-             REPEAT x := x + 1; UNTIL x >= 10 END_REPEAT; END_PROGRAM"
+             REPEAT x := x + 1; UNTIL x >= 10 END_REPEAT; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
             assert!(matches!(&p.body[0], Statement::Repeat { .. }));
@@ -1200,10 +1296,15 @@ mod tests {
                 1..3: x := 1.0; \
                 4, 5: x := 2.0; \
              ELSE x := -1.0; \
-             END_CASE; END_PROGRAM"
+             END_CASE; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
-            if let Statement::Case { branches, else_body, .. } = &p.body[0] {
+            if let Statement::Case {
+                branches,
+                else_body,
+                ..
+            } = &p.body[0]
+            {
                 assert_eq!(branches.len(), 3);
                 assert!(else_body.is_some());
             }
@@ -1218,7 +1319,7 @@ mod tests {
             "FUNCTION Add : INT \
              VAR_INPUT a : INT; b : INT; END_VAR \
              Add := a + b; \
-             END_FUNCTION"
+             END_FUNCTION",
         );
         if let Pou::Function(f) = &unit.units[0] {
             assert_eq!(f.name, "Add");
@@ -1236,7 +1337,7 @@ mod tests {
              VAR internal : INT := 0; END_VAR \
              IF enable THEN internal := internal + 1; END_IF; \
              count := internal; \
-             END_FUNCTION_BLOCK"
+             END_FUNCTION_BLOCK",
         );
         if let Pou::FunctionBlock(fb) = &unit.units[0] {
             assert_eq!(fb.name, "Counter");
@@ -1251,7 +1352,7 @@ mod tests {
     fn test_array_access() {
         let unit = parse_ok(
             "PROGRAM P VAR a : ARRAY[0..9] OF INT; i : INT; END_VAR \
-             a[i] := a[i] + 1; END_PROGRAM"
+             a[i] := a[i] + 1; END_PROGRAM",
         );
         if let Pou::Program(p) = &unit.units[0] {
             if let Statement::Assignment { target, .. } = &p.body[0] {
@@ -1262,9 +1363,7 @@ mod tests {
 
     #[test]
     fn test_member_access() {
-        let unit = parse_ok(
-            "PROGRAM P VAR x : INT; END_VAR x := myFB.output; END_PROGRAM"
-        );
+        let unit = parse_ok("PROGRAM P VAR x : INT; END_VAR x := myFB.output; END_PROGRAM");
         if let Pou::Program(p) = &unit.units[0] {
             if let Statement::Assignment { value, .. } = &p.body[0] {
                 if let Expression::MemberAccess { member, .. } = value {

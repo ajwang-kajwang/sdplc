@@ -81,10 +81,12 @@ fn main() {
     let telemetry_path = config.output_dir.join("flotation_tank_telemetry.csv");
     let opcua_path = config.output_dir.join("opcua_address_space.csv");
 
-    fs::write(&timing_path, format!("{}\n{}\n", ScanTiming::csv_header(), timing.csv_row()))
-        .expect("failed to write scan timing csv");
-    fs::write(&telemetry_path, telemetry.join("\n") + "\n")
-        .expect("failed to write telemetry csv");
+    fs::write(
+        &timing_path,
+        format!("{}\n{}\n", ScanTiming::csv_header(), timing.csv_row()),
+    )
+    .expect("failed to write scan timing csv");
+    fs::write(&telemetry_path, telemetry.join("\n") + "\n").expect("failed to write telemetry csv");
     fs::write(&opcua_path, opcua_nodes.join("\n") + "\n")
         .expect("failed to write opc ua address space csv");
 
@@ -108,7 +110,9 @@ fn parse_args() -> Config {
         if let Some(value) = arg.strip_prefix("--cycles=") {
             config.cycles = value.parse().expect("--cycles must be a positive integer");
         } else if let Some(value) = arg.strip_prefix("--scan-time=") {
-            config.scan_time_ms = value.parse().expect("--scan-time must be a positive integer");
+            config.scan_time_ms = value
+                .parse()
+                .expect("--scan-time must be a positive integer");
         } else if let Some(value) = arg.strip_prefix("--out=") {
             config.output_dir = PathBuf::from(value);
         } else if arg == "--help" || arg == "-h" {

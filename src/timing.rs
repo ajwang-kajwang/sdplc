@@ -50,7 +50,11 @@ impl ScanTiming {
     }
 
     pub fn avg_exec_us(&self) -> f64 {
-        if self.cycles == 0 { 0.0 } else { self.exec_total_us / self.cycles as f64 }
+        if self.cycles == 0 {
+            0.0
+        } else {
+            self.exec_total_us / self.cycles as f64
+        }
     }
 
     pub fn max_exec_us(&self) -> f64 {
@@ -58,7 +62,11 @@ impl ScanTiming {
     }
 
     pub fn avg_jitter_us(&self) -> f64 {
-        if self.cycles == 0 { 0.0 } else { self.jitter_total_us / self.cycles as f64 }
+        if self.cycles == 0 {
+            0.0
+        } else {
+            self.jitter_total_us / self.cycles as f64
+        }
     }
 
     pub fn max_jitter_us(&self) -> f64 {

@@ -149,8 +149,12 @@ pub enum ProcessImageError {
 impl fmt::Display for ProcessImageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProcessImageError::Missing(name) => write!(f, "process variable '{}' does not exist", name),
-            ProcessImageError::ReadOnly(name) => write!(f, "process variable '{}' is read-only", name),
+            ProcessImageError::Missing(name) => {
+                write!(f, "process variable '{}' does not exist", name)
+            }
+            ProcessImageError::ReadOnly(name) => {
+                write!(f, "process variable '{}' is read-only", name)
+            }
         }
     }
 }

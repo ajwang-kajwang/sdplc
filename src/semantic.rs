@@ -37,8 +37,8 @@
 //! | DWORD       | i32     | 32   |
 //! | LWORD       | i64     | 64   |
 
-use std::collections::HashMap;
 use crate::ast::*;
+use std::collections::HashMap;
 
 // ─── Resolved Types ─────────────────────────────────────────────
 
@@ -87,25 +87,29 @@ impl ResolvedType {
     pub fn int_bits(&self) -> Option<u32> {
         match self {
             Self::Bool => Some(1),
-            Self::SignedInt { bits } | Self::UnsignedInt { bits } |
-            Self::BitString { bits } => Some(*bits),
+            Self::SignedInt { bits } | Self::UnsignedInt { bits } | Self::BitString { bits } => {
+                Some(*bits)
+            }
             _ => None,
         }
     }
 
     /// Returns true if this is a numeric type (integer or float).
     pub fn is_numeric(&self) -> bool {
-        matches!(self,
-            Self::SignedInt { .. } | Self::UnsignedInt { .. } |
-            Self::Float { .. } | Self::BitString { .. }
+        matches!(
+            self,
+            Self::SignedInt { .. }
+                | Self::UnsignedInt { .. }
+                | Self::Float { .. }
+                | Self::BitString { .. }
         )
     }
 
     /// Returns true if this is an integer type (signed, unsigned, or bit string).
     pub fn is_integer(&self) -> bool {
-        matches!(self,
-            Self::SignedInt { .. } | Self::UnsignedInt { .. } |
-            Self::BitString { .. }
+        matches!(
+            self,
+            Self::SignedInt { .. } | Self::UnsignedInt { .. } | Self::BitString { .. }
         )
     }
 
@@ -125,28 +129,35 @@ impl std::fmt::Display for ResolvedType {
         match self {
             Self::Bool => write!(f, "BOOL"),
             Self::SignedInt { bits } => match bits {
-                8 => write!(f, "SINT"), 16 => write!(f, "INT"),
-                32 => write!(f, "DINT"), 64 => write!(f, "LINT"),
+                8 => write!(f, "SINT"),
+                16 => write!(f, "INT"),
+                32 => write!(f, "DINT"),
+                64 => write!(f, "LINT"),
                 _ => write!(f, "i{}", bits),
             },
             Self::UnsignedInt { bits } => match bits {
-                8 => write!(f, "USINT"), 16 => write!(f, "UINT"),
-                32 => write!(f, "UDINT"), 64 => write!(f, "ULINT"),
+                8 => write!(f, "USINT"),
+                16 => write!(f, "UINT"),
+                32 => write!(f, "UDINT"),
+                64 => write!(f, "ULINT"),
                 _ => write!(f, "u{}", bits),
             },
             Self::Float { bits } => match bits {
-                32 => write!(f, "REAL"), 64 => write!(f, "LREAL"),
+                32 => write!(f, "REAL"),
+                64 => write!(f, "LREAL"),
                 _ => write!(f, "f{}", bits),
             },
             Self::BitString { bits } => match bits {
-                8 => write!(f, "BYTE"), 16 => write!(f, "WORD"),
-                32 => write!(f, "DWORD"), 64 => write!(f, "LWORD"),
+                8 => write!(f, "BYTE"),
+                16 => write!(f, "WORD"),
+                32 => write!(f, "DWORD"),
+                64 => write!(f, "LWORD"),
                 _ => write!(f, "bits{}", bits),
             },
             Self::Time => write!(f, "TIME"),
             Self::Date => write!(f, "DATE"),
-            Self::Tod  => write!(f, "TOD"),
-            Self::Dt   => write!(f, "DT"),
+            Self::Tod => write!(f, "TOD"),
+            Self::Dt => write!(f, "DT"),
             Self::Str { max_len } => write!(f, "STRING[{}]", max_len),
             Self::WStr { max_len } => write!(f, "WSTRING[{}]", max_len),
             Self::Array { element, .. } => write!(f, "ARRAY OF {}", element),
@@ -278,10 +289,14 @@ pub struct Diagnostic {
 impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = match self.severity {
-            Severity::Error   => "error",
+            Severity::Error => "error",
             Severity::Warning => "warning",
         };
-        write!(f, "[{}:{}] {}: {}", self.line, self.col, prefix, self.message)
+        write!(
+            f,
+            "[{}:{}] {}: {}",
+            self.line, self.col, prefix, self.message
+        )
     }
 }
 
@@ -300,15 +315,23 @@ pub struct ProgramContext {
 
 impl ProgramContext {
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.severity == Severity::Error)
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
     }
 
     pub fn error_count(&self) -> usize {
-        self.diagnostics.iter().filter(|d| d.severity == Severity::Error).count()
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count()
     }
 
     pub fn warning_count(&self) -> usize {
-        self.diagnostics.iter().filter(|d| d.severity == Severity::Warning).count()
+        self.diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .count()
     }
 }
 
@@ -382,19 +405,22 @@ impl SemanticAnalyzer {
     pub fn resolve_type(&mut self, ts: &TypeSpec) -> ResolvedType {
         match ts {
             TypeSpec::Elementary(et) => self.resolve_elementary(et),
-            TypeSpec::Array { ranges, element_type } => {
+            TypeSpec::Array {
+                ranges,
+                element_type,
+            } => {
                 let element = self.resolve_type(element_type);
                 ResolvedType::Array {
                     element: Box::new(element),
                     ranges: ranges.clone(),
                 }
             }
-            TypeSpec::StringType { max_len } => {
-                ResolvedType::Str { max_len: max_len.unwrap_or(254) }
-            }
-            TypeSpec::WStringType { max_len } => {
-                ResolvedType::WStr { max_len: max_len.unwrap_or(254) }
-            }
+            TypeSpec::StringType { max_len } => ResolvedType::Str {
+                max_len: max_len.unwrap_or(254),
+            },
+            TypeSpec::WStringType { max_len } => ResolvedType::WStr {
+                max_len: max_len.unwrap_or(254),
+            },
             TypeSpec::UserDefined(name) => {
                 // Check if it's a known function block
                 if self.symbols.lookup_pou(name).is_some() {
@@ -408,25 +434,25 @@ impl SemanticAnalyzer {
 
     fn resolve_elementary(&self, et: &ElementaryType) -> ResolvedType {
         match et {
-            ElementaryType::Bool  => ResolvedType::Bool,
-            ElementaryType::Sint  => ResolvedType::SignedInt { bits: 8 },
-            ElementaryType::Int   => ResolvedType::SignedInt { bits: 16 },
-            ElementaryType::Dint  => ResolvedType::SignedInt { bits: 32 },
-            ElementaryType::Lint  => ResolvedType::SignedInt { bits: 64 },
+            ElementaryType::Bool => ResolvedType::Bool,
+            ElementaryType::Sint => ResolvedType::SignedInt { bits: 8 },
+            ElementaryType::Int => ResolvedType::SignedInt { bits: 16 },
+            ElementaryType::Dint => ResolvedType::SignedInt { bits: 32 },
+            ElementaryType::Lint => ResolvedType::SignedInt { bits: 64 },
             ElementaryType::Usint => ResolvedType::UnsignedInt { bits: 8 },
-            ElementaryType::Uint  => ResolvedType::UnsignedInt { bits: 16 },
+            ElementaryType::Uint => ResolvedType::UnsignedInt { bits: 16 },
             ElementaryType::Udint => ResolvedType::UnsignedInt { bits: 32 },
             ElementaryType::Ulint => ResolvedType::UnsignedInt { bits: 64 },
-            ElementaryType::Real  => ResolvedType::Float { bits: 32 },
+            ElementaryType::Real => ResolvedType::Float { bits: 32 },
             ElementaryType::Lreal => ResolvedType::Float { bits: 64 },
-            ElementaryType::Byte  => ResolvedType::BitString { bits: 8 },
-            ElementaryType::Word  => ResolvedType::BitString { bits: 16 },
+            ElementaryType::Byte => ResolvedType::BitString { bits: 8 },
+            ElementaryType::Word => ResolvedType::BitString { bits: 16 },
             ElementaryType::Dword => ResolvedType::BitString { bits: 32 },
             ElementaryType::Lword => ResolvedType::BitString { bits: 64 },
-            ElementaryType::Time  => ResolvedType::Time,
-            ElementaryType::Date  => ResolvedType::Date,
-            ElementaryType::Tod   => ResolvedType::Tod,
-            ElementaryType::Dt    => ResolvedType::Dt,
+            ElementaryType::Time => ResolvedType::Time,
+            ElementaryType::Date => ResolvedType::Date,
+            ElementaryType::Tod => ResolvedType::Tod,
+            ElementaryType::Dt => ResolvedType::Dt,
         }
     }
 
@@ -435,36 +461,49 @@ impl SemanticAnalyzer {
     fn register_pou(&mut self, pou: &Pou) {
         match pou {
             Pou::Program(p) => {
-                self.symbols.register_pou(&p.name, PouInfo {
-                    kind: PouKind::Program,
-                    return_type: None,
-                    parameters: Vec::new(),
-                });
+                self.symbols.register_pou(
+                    &p.name,
+                    PouInfo {
+                        kind: PouKind::Program,
+                        return_type: None,
+                        parameters: Vec::new(),
+                    },
+                );
             }
             Pou::Function(f) => {
                 let ret = self.resolve_type(&f.return_type);
                 let params = self.extract_parameters(&f.var_blocks);
-                self.symbols.register_pou(&f.name, PouInfo {
-                    kind: PouKind::Function,
-                    return_type: Some(ret),
-                    parameters: params,
-                });
+                self.symbols.register_pou(
+                    &f.name,
+                    PouInfo {
+                        kind: PouKind::Function,
+                        return_type: Some(ret),
+                        parameters: params,
+                    },
+                );
             }
             Pou::FunctionBlock(fb) => {
                 let params = self.extract_parameters(&fb.var_blocks);
-                self.symbols.register_pou(&fb.name, PouInfo {
-                    kind: PouKind::FunctionBlock,
-                    return_type: None,
-                    parameters: params,
-                });
+                self.symbols.register_pou(
+                    &fb.name,
+                    PouInfo {
+                        kind: PouKind::FunctionBlock,
+                        return_type: None,
+                        parameters: params,
+                    },
+                );
             }
         }
     }
 
-    fn extract_parameters(&mut self, var_blocks: &[VarBlock]) -> Vec<(String, ResolvedType, VarQualifier)> {
+    fn extract_parameters(
+        &mut self,
+        var_blocks: &[VarBlock],
+    ) -> Vec<(String, ResolvedType, VarQualifier)> {
         let mut params = Vec::new();
         for block in var_blocks {
-            if matches!(block.qualifier,
+            if matches!(
+                block.qualifier,
                 VarQualifier::VarInput | VarQualifier::VarOutput | VarQualifier::VarInOut
             ) {
                 for decl in &block.declarations {
@@ -490,14 +529,17 @@ impl SemanticAnalyzer {
                 self.symbols.push_scope();
                 let ret = self.resolve_type(&f.return_type);
                 // Declare the function name as a variable for return value assignment
-                self.symbols.declare(&f.name, SymbolInfo {
-                    resolved_type: ret.clone(),
-                    type_spec: f.return_type.clone(),
-                    qualifier: VarQualifier::Var,
-                    is_constant: false,
-                    is_retain: false,
-                    span: f.span.clone(),
-                });
+                self.symbols.declare(
+                    &f.name,
+                    SymbolInfo {
+                        resolved_type: ret.clone(),
+                        type_spec: f.return_type.clone(),
+                        qualifier: VarQualifier::Var,
+                        is_constant: false,
+                        is_retain: false,
+                        span: f.span.clone(),
+                    },
+                );
                 self.declare_var_blocks(&f.var_blocks);
                 self.in_function = true;
                 self.current_return_type = Some(ret);
@@ -528,14 +570,17 @@ impl SemanticAnalyzer {
                     }
                 }
 
-                if let Some(msg) = self.symbols.declare(&decl.name, SymbolInfo {
-                    resolved_type: resolved,
-                    type_spec: decl.type_spec.clone(),
-                    qualifier: block.qualifier.clone(),
-                    is_constant: block.constant,
-                    is_retain: block.retain,
-                    span: decl.span.clone(),
-                }) {
+                if let Some(msg) = self.symbols.declare(
+                    &decl.name,
+                    SymbolInfo {
+                        resolved_type: resolved,
+                        type_spec: decl.type_spec.clone(),
+                        qualifier: block.qualifier.clone(),
+                        is_constant: block.constant,
+                        is_retain: block.retain,
+                        span: decl.span.clone(),
+                    },
+                ) {
                     self.error(&decl.span, msg);
                 }
             }
@@ -552,7 +597,11 @@ impl SemanticAnalyzer {
 
     fn analyze_statement(&mut self, stmt: &Statement) {
         match stmt {
-            Statement::Assignment { target, value, span } => {
+            Statement::Assignment {
+                target,
+                value,
+                span,
+            } => {
                 let target_type = self.check_expression(target);
                 let value_type = self.check_expression(value);
 
@@ -560,9 +609,7 @@ impl SemanticAnalyzer {
                 if let Expression::Identifier { name, .. } = target {
                     if let Some(sym) = self.symbols.lookup(name) {
                         if sym.is_constant {
-                            self.error(span, format!(
-                                "cannot assign to CONSTANT '{}'", name
-                            ));
+                            self.error(span, format!("cannot assign to CONSTANT '{}'", name));
                         }
                     }
                 }
@@ -572,7 +619,13 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Statement::If { condition, then_body, elsif_branches, else_body, span } => {
+            Statement::If {
+                condition,
+                then_body,
+                elsif_branches,
+                else_body,
+                span,
+            } => {
                 let cond_type = self.check_expression(condition);
                 self.require_bool(&cond_type, span, "IF condition");
 
@@ -589,24 +642,36 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Statement::For { variable, from, to, by, body, span } => {
+            Statement::For {
+                variable,
+                from,
+                to,
+                by,
+                body,
+                span,
+            } => {
                 // FOR variable must be declared and integer
                 if let Some(sym) = self.symbols.lookup(variable).cloned() {
                     if !sym.resolved_type.is_integer() {
-                        self.error(span, format!(
-                            "FOR variable '{}' must be an integer type, found {}",
-                            variable, sym.resolved_type
-                        ));
+                        self.error(
+                            span,
+                            format!(
+                                "FOR variable '{}' must be an integer type, found {}",
+                                variable, sym.resolved_type
+                            ),
+                        );
                     }
                     if sym.is_constant {
-                        self.error(span, format!(
-                            "cannot use CONSTANT '{}' as FOR variable", variable
-                        ));
+                        self.error(
+                            span,
+                            format!("cannot use CONSTANT '{}' as FOR variable", variable),
+                        );
                     }
                 } else {
-                    self.error(span, format!(
-                        "undeclared variable '{}' in FOR loop", variable
-                    ));
+                    self.error(
+                        span,
+                        format!("undeclared variable '{}' in FOR loop", variable),
+                    );
                 }
 
                 let from_type = self.check_expression(from);
@@ -624,7 +689,11 @@ impl SemanticAnalyzer {
                 self.loop_depth -= 1;
             }
 
-            Statement::While { condition, body, span } => {
+            Statement::While {
+                condition,
+                body,
+                span,
+            } => {
                 let cond_type = self.check_expression(condition);
                 self.require_bool(&cond_type, span, "WHILE condition");
 
@@ -633,7 +702,11 @@ impl SemanticAnalyzer {
                 self.loop_depth -= 1;
             }
 
-            Statement::Repeat { body, condition, span } => {
+            Statement::Repeat {
+                body,
+                condition,
+                span,
+            } => {
                 self.loop_depth += 1;
                 self.analyze_statements(body);
                 self.loop_depth -= 1;
@@ -642,12 +715,18 @@ impl SemanticAnalyzer {
                 self.require_bool(&cond_type, span, "UNTIL condition");
             }
 
-            Statement::Case { selector, branches, else_body, span } => {
+            Statement::Case {
+                selector,
+                branches,
+                else_body,
+                span,
+            } => {
                 let sel_type = self.check_expression(selector);
                 if sel_type != ResolvedType::Error && !sel_type.is_integer() {
-                    self.error(span, format!(
-                        "CASE selector must be integer type, found {}", sel_type
-                    ));
+                    self.error(
+                        span,
+                        format!("CASE selector must be integer type, found {}", sel_type),
+                    );
                 }
 
                 for branch in branches {
@@ -678,9 +757,7 @@ impl SemanticAnalyzer {
 
             Statement::Return { span } => {
                 if !self.in_function {
-                    self.warning(span,
-                        "RETURN outside of FUNCTION has no effect".to_string()
-                    );
+                    self.warning(span, "RETURN outside of FUNCTION has no effect".to_string());
                 }
             }
 
@@ -717,7 +794,12 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expression::BinaryOp { left, op, right, span } => {
+            Expression::BinaryOp {
+                left,
+                op,
+                right,
+                span,
+            } => {
                 let lt = self.check_expression(left);
                 let rt = self.check_expression(right);
 
@@ -737,11 +819,14 @@ impl SemanticAnalyzer {
                 match op {
                     UnaryOperator::Neg | UnaryOperator::Pos => {
                         if !ot.is_numeric() {
-                            self.error(span, format!(
-                                "unary {} requires numeric operand, found {}",
-                                if *op == UnaryOperator::Neg { "-" } else { "+" },
-                                ot
-                            ));
+                            self.error(
+                                span,
+                                format!(
+                                    "unary {} requires numeric operand, found {}",
+                                    if *op == UnaryOperator::Neg { "-" } else { "+" },
+                                    ot
+                                ),
+                            );
                             ResolvedType::Error
                         } else {
                             ot
@@ -749,9 +834,10 @@ impl SemanticAnalyzer {
                     }
                     UnaryOperator::Not => {
                         if ot != ResolvedType::Bool && !ot.is_integer() {
-                            self.error(span, format!(
-                                "NOT requires BOOL or integer operand, found {}", ot
-                            ));
+                            self.error(
+                                span,
+                                format!("NOT requires BOOL or integer operand, found {}", ot),
+                            );
                             ResolvedType::Error
                         } else {
                             ot
@@ -760,39 +846,51 @@ impl SemanticAnalyzer {
                 }
             }
 
-            Expression::FunctionCall { name, args, span } => {
-                self.check_call(name, args, span)
-            }
+            Expression::FunctionCall { name, args, span } => self.check_call(name, args, span),
 
-            Expression::ArrayAccess { array, indices, span } => {
+            Expression::ArrayAccess {
+                array,
+                indices,
+                span,
+            } => {
                 let arr_type = self.check_expression(array);
                 for idx in indices {
                     let idx_type = self.check_expression(idx);
                     if idx_type != ResolvedType::Error && !idx_type.is_integer() {
-                        self.error(span, format!(
-                            "array index must be integer, found {}", idx_type
-                        ));
+                        self.error(
+                            span,
+                            format!("array index must be integer, found {}", idx_type),
+                        );
                     }
                 }
                 if let ResolvedType::Array { element, ranges } = &arr_type {
                     if indices.len() != ranges.len() {
-                        self.error(span, format!(
-                            "expected {} array index(es), found {}",
-                            ranges.len(), indices.len()
-                        ));
+                        self.error(
+                            span,
+                            format!(
+                                "expected {} array index(es), found {}",
+                                ranges.len(),
+                                indices.len()
+                            ),
+                        );
                     }
                     *element.clone()
                 } else if arr_type != ResolvedType::Error {
-                    self.error(span, format!(
-                        "subscript applied to non-array type {}", arr_type
-                    ));
+                    self.error(
+                        span,
+                        format!("subscript applied to non-array type {}", arr_type),
+                    );
                     ResolvedType::Error
                 } else {
                     ResolvedType::Error
                 }
             }
 
-            Expression::MemberAccess { object, member, span } => {
+            Expression::MemberAccess {
+                object,
+                member,
+                span,
+            } => {
                 let obj_type = self.check_expression(object);
                 // Member access on FB instances — codegen will resolve
                 // the actual field. For now, accept and return Error
@@ -805,15 +903,14 @@ impl SemanticAnalyzer {
                                 return ptype.clone();
                             }
                         }
-                        self.error(span, format!(
-                            "'{}' has no member '{}'", name, member
-                        ));
+                        self.error(span, format!("'{}' has no member '{}'", name, member));
                     }
                     ResolvedType::Error
                 } else if obj_type != ResolvedType::Error {
-                    self.error(span, format!(
-                        "member access on non-structured type {}", obj_type
-                    ));
+                    self.error(
+                        span,
+                        format!("member access on non-structured type {}", obj_type),
+                    );
                     ResolvedType::Error
                 } else {
                     ResolvedType::Error
@@ -833,14 +930,19 @@ impl SemanticAnalyzer {
     ) -> ResolvedType {
         match op {
             // Arithmetic: both numeric, result is promoted type
-            BinaryOperator::Add | BinaryOperator::Sub |
-            BinaryOperator::Mul | BinaryOperator::Div |
-            BinaryOperator::Power => {
+            BinaryOperator::Add
+            | BinaryOperator::Sub
+            | BinaryOperator::Mul
+            | BinaryOperator::Div
+            | BinaryOperator::Power => {
                 if !lt.is_numeric() || !rt.is_numeric() {
-                    self.error(span, format!(
-                        "operator {} requires numeric operands, found {} and {}",
-                        op, lt, rt
-                    ));
+                    self.error(
+                        span,
+                        format!(
+                            "operator {} requires numeric operands, found {} and {}",
+                            op, lt, rt
+                        ),
+                    );
                     return ResolvedType::Error;
                 }
                 self.promote_numeric(lt, rt)
@@ -849,27 +951,34 @@ impl SemanticAnalyzer {
             // MOD: integer only
             BinaryOperator::Mod => {
                 if !lt.is_integer() || !rt.is_integer() {
-                    self.error(span, format!(
-                        "MOD requires integer operands, found {} and {}", lt, rt
-                    ));
+                    self.error(
+                        span,
+                        format!("MOD requires integer operands, found {} and {}", lt, rt),
+                    );
                     return ResolvedType::Error;
                 }
                 self.promote_numeric(lt, rt)
             }
 
             // Comparison: numeric, result is BOOL
-            BinaryOperator::Eq | BinaryOperator::Neq |
-            BinaryOperator::Lt | BinaryOperator::Le |
-            BinaryOperator::Gt | BinaryOperator::Ge => {
+            BinaryOperator::Eq
+            | BinaryOperator::Neq
+            | BinaryOperator::Lt
+            | BinaryOperator::Le
+            | BinaryOperator::Gt
+            | BinaryOperator::Ge => {
                 // Allow BOOL = BOOL comparison
                 if *lt == ResolvedType::Bool && *rt == ResolvedType::Bool {
                     return ResolvedType::Bool;
                 }
                 if !lt.is_numeric() || !rt.is_numeric() {
-                    self.error(span, format!(
-                        "comparison {} requires numeric operands, found {} and {}",
-                        op, lt, rt
-                    ));
+                    self.error(
+                        span,
+                        format!(
+                            "comparison {} requires numeric operands, found {} and {}",
+                            op, lt, rt
+                        ),
+                    );
                     return ResolvedType::Error;
                 }
                 ResolvedType::Bool
@@ -883,10 +992,13 @@ impl SemanticAnalyzer {
                 if lt.is_integer() && rt.is_integer() {
                     return self.promote_numeric(lt, rt);
                 }
-                self.error(span, format!(
-                    "operator {} requires BOOL or integer operands, found {} and {}",
-                    op, lt, rt
-                ));
+                self.error(
+                    span,
+                    format!(
+                        "operator {} requires BOOL or integer operands, found {} and {}",
+                        op, lt, rt
+                    ),
+                );
                 ResolvedType::Error
             }
         }
@@ -898,9 +1010,17 @@ impl SemanticAnalyzer {
     fn promote_numeric(&self, a: &ResolvedType, b: &ResolvedType) -> ResolvedType {
         // Float wins over integer
         if a.is_float() || b.is_float() {
-            let bits_a = match a { ResolvedType::Float { bits } => *bits, _ => 0 };
-            let bits_b = match b { ResolvedType::Float { bits } => *bits, _ => 0 };
-            return ResolvedType::Float { bits: bits_a.max(bits_b).max(32) };
+            let bits_a = match a {
+                ResolvedType::Float { bits } => *bits,
+                _ => 0,
+            };
+            let bits_b = match b {
+                ResolvedType::Float { bits } => *bits,
+                _ => 0,
+            };
+            return ResolvedType::Float {
+                bits: bits_a.max(bits_b).max(32),
+            };
         }
 
         // Both integers — take the wider width
@@ -914,8 +1034,7 @@ impl SemanticAnalyzer {
         } else {
             // Check if either is a bit string
             match (a, b) {
-                (ResolvedType::BitString { .. }, _) |
-                (_, ResolvedType::BitString { .. }) => {
+                (ResolvedType::BitString { .. }, _) | (_, ResolvedType::BitString { .. }) => {
                     ResolvedType::BitString { bits: max_bits }
                 }
                 _ => ResolvedType::UnsignedInt { bits: max_bits },
@@ -925,12 +1044,7 @@ impl SemanticAnalyzer {
 
     // ── Assignment compatibility ─────────────────────────────────
 
-    fn check_assignable(
-        &mut self,
-        target: &ResolvedType,
-        value: &ResolvedType,
-        span: &Span,
-    ) {
+    fn check_assignable(&mut self, target: &ResolvedType, value: &ResolvedType, span: &Span) {
         if target == value {
             return; // exact match
         }
@@ -940,55 +1054,48 @@ impl SemanticAnalyzer {
             // Integer → float is ok, narrow → wide is ok
             // We issue a warning for potential precision loss
             if value.is_float() && target.is_integer() {
-                self.warning(span, format!(
-                    "implicit conversion from {} to {} may lose precision",
-                    value, target
-                ));
+                self.warning(
+                    span,
+                    format!(
+                        "implicit conversion from {} to {} may lose precision",
+                        value, target
+                    ),
+                );
             }
             return; // numeric assignment allowed
         }
 
         // Allow BOOL to BOOL (already caught by exact match)
         // Disallow everything else
-        self.error(span, format!(
-            "cannot assign {} to {}", value, target
-        ));
+        self.error(span, format!("cannot assign {} to {}", value, target));
     }
 
     // ── Constraint helpers ──────────────────────────────────────
 
     fn require_bool(&mut self, ty: &ResolvedType, span: &Span, context: &str) {
         if *ty != ResolvedType::Bool && *ty != ResolvedType::Error {
-            self.error(span, format!(
-                "{} must be BOOL, found {}", context, ty
-            ));
+            self.error(span, format!("{} must be BOOL, found {}", context, ty));
         }
     }
 
     fn require_numeric(&mut self, ty: &ResolvedType, span: &Span, context: &str) {
         if !ty.is_numeric() && *ty != ResolvedType::Error {
-            self.error(span, format!(
-                "{} must be numeric, found {}", context, ty
-            ));
+            self.error(span, format!("{} must be numeric, found {}", context, ty));
         }
     }
 
     // ── Call checking ───────────────────────────────────────────
 
-    fn check_call(
-        &mut self,
-        name: &str,
-        _args: &[CallArg],
-        span: &Span,
-    ) -> ResolvedType {
+    fn check_call(&mut self, name: &str, _args: &[CallArg], span: &Span) -> ResolvedType {
         if let Some(pou) = self.symbols.lookup_pou(name) {
             // Return the function's return type, or BOOL as default for FB/PROGRAM
             pou.return_type.clone().unwrap_or(ResolvedType::Bool)
         } else {
             // Could be a built-in function — accept with a warning for now
-            self.warning(span, format!(
-                "call to unknown function/FB '{}' — assuming valid", name
-            ));
+            self.warning(
+                span,
+                format!("call to unknown function/FB '{}' — assuming valid", name),
+            );
             ResolvedType::SignedInt { bits: 32 } // default return type
         }
     }
@@ -1030,7 +1137,9 @@ mod tests {
     fn analyze_src(src: &str) -> ProgramContext {
         let lexer = Lexer::new(src);
         let mut parser = Parser::new(lexer);
-        let ast = parser.parse().unwrap_or_else(|e| panic!("Parse error: {}", e));
+        let ast = parser
+            .parse()
+            .unwrap_or_else(|e| panic!("Parse error: {}", e));
         analyze(ast)
     }
 
@@ -1103,37 +1212,35 @@ mod tests {
     #[test]
     fn test_valid_declarations() {
         assert_no_errors(
-            "PROGRAM P VAR x : INT := 0; y : REAL := 3.14; z : BOOL := TRUE; END_VAR END_PROGRAM"
+            "PROGRAM P VAR x : INT := 0; y : REAL := 3.14; z : BOOL := TRUE; END_VAR END_PROGRAM",
         );
     }
 
     #[test]
     fn test_duplicate_variable() {
-        let ctx = assert_has_errors(
-            "PROGRAM P VAR x : INT; x : REAL; END_VAR END_PROGRAM"
+        let ctx = assert_has_errors("PROGRAM P VAR x : INT; x : REAL; END_VAR END_PROGRAM");
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("already declared"))
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("already declared")
-        ));
     }
 
     // ── Undeclared variables ────────────────────────────────────
 
     #[test]
     fn test_undeclared_variable() {
-        let ctx = assert_has_errors(
-            "PROGRAM P VAR x : INT; END_VAR y := 42; END_PROGRAM"
+        let ctx = assert_has_errors("PROGRAM P VAR x : INT; END_VAR y := 42; END_PROGRAM");
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("undeclared variable 'y'"))
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("undeclared variable 'y'")
-        ));
     }
 
     #[test]
     fn test_valid_variable_usage() {
-        assert_no_errors(
-            "PROGRAM P VAR x : INT := 0; END_VAR x := x + 1; END_PROGRAM"
-        );
+        assert_no_errors("PROGRAM P VAR x : INT := 0; END_VAR x := x + 1; END_PROGRAM");
     }
 
     // ── Constant enforcement ────────────────────────────────────
@@ -1141,11 +1248,13 @@ mod tests {
     #[test]
     fn test_constant_assignment() {
         let ctx = assert_has_errors(
-            "PROGRAM P VAR CONSTANT MAX : INT := 100; END_VAR MAX := 200; END_PROGRAM"
+            "PROGRAM P VAR CONSTANT MAX : INT := 100; END_VAR MAX := 200; END_PROGRAM",
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("cannot assign to CONSTANT")
-        ));
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("cannot assign to CONSTANT"))
+        );
     }
 
     // ── Type checking: assignments ──────────────────────────────
@@ -1153,48 +1262,47 @@ mod tests {
     #[test]
     fn test_numeric_assignment_ok() {
         // INT := DINT — numeric widening is allowed
-        assert_no_errors(
-            "PROGRAM P VAR x : REAL; END_VAR x := 42; END_PROGRAM"
-        );
+        assert_no_errors("PROGRAM P VAR x : REAL; END_VAR x := 42; END_PROGRAM");
     }
 
     #[test]
     fn test_bool_to_int_assignment() {
-        let ctx = assert_has_errors(
-            "PROGRAM P VAR x : INT; END_VAR x := TRUE; END_PROGRAM"
+        let ctx = assert_has_errors("PROGRAM P VAR x : INT; END_VAR x := TRUE; END_PROGRAM");
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("cannot assign"))
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("cannot assign")
-        ));
     }
 
     // ── Type checking: operators ────────────────────────────────
 
     #[test]
     fn test_arithmetic_requires_numeric() {
-        let ctx = assert_has_errors(
-            "PROGRAM P VAR x : INT; b : BOOL; END_VAR x := x + b; END_PROGRAM"
+        let ctx =
+            assert_has_errors("PROGRAM P VAR x : INT; b : BOOL; END_VAR x := x + b; END_PROGRAM");
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("requires numeric operands"))
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("requires numeric operands")
-        ));
     }
 
     #[test]
     fn test_mod_requires_integer() {
-        let ctx = assert_has_errors(
-            "PROGRAM P VAR x : REAL; END_VAR x := x MOD 2.0; END_PROGRAM"
+        let ctx = assert_has_errors("PROGRAM P VAR x : REAL; END_VAR x := x MOD 2.0; END_PROGRAM");
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("MOD requires integer"))
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("MOD requires integer")
-        ));
     }
 
     #[test]
     fn test_boolean_operators_ok() {
         assert_no_errors(
             "PROGRAM P VAR a : BOOL; b : BOOL; c : BOOL; END_VAR \
-             c := a AND b OR NOT c; END_PROGRAM"
+             c := a AND b OR NOT c; END_PROGRAM",
         );
     }
 
@@ -1202,7 +1310,7 @@ mod tests {
     fn test_comparison_produces_bool() {
         assert_no_errors(
             "PROGRAM P VAR x : INT; flag : BOOL; END_VAR \
-             flag := x > 0; END_PROGRAM"
+             flag := x > 0; END_PROGRAM",
         );
     }
 
@@ -1212,50 +1320,56 @@ mod tests {
     fn test_if_requires_bool() {
         let ctx = assert_has_errors(
             "PROGRAM P VAR x : INT; END_VAR \
-             IF x THEN x := 0; END_IF; END_PROGRAM"
+             IF x THEN x := 0; END_IF; END_PROGRAM",
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("must be BOOL")
-        ));
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("must be BOOL"))
+        );
     }
 
     #[test]
     fn test_while_requires_bool() {
         let ctx = assert_has_errors(
             "PROGRAM P VAR x : INT; END_VAR \
-             WHILE x DO x := x - 1; END_WHILE; END_PROGRAM"
+             WHILE x DO x := x - 1; END_WHILE; END_PROGRAM",
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("must be BOOL")
-        ));
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("must be BOOL"))
+        );
     }
 
     #[test]
     fn test_for_requires_integer_var() {
         let ctx = assert_has_errors(
             "PROGRAM P VAR r : REAL; END_VAR \
-             FOR r := 0.0 TO 10.0 DO r := r + 1.0; END_FOR; END_PROGRAM"
+             FOR r := 0.0 TO 10.0 DO r := r + 1.0; END_FOR; END_PROGRAM",
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("must be an integer type")
-        ));
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("must be an integer type"))
+        );
     }
 
     #[test]
     fn test_exit_outside_loop() {
-        let ctx = assert_has_errors(
-            "PROGRAM P VAR x : INT; END_VAR EXIT; END_PROGRAM"
+        let ctx = assert_has_errors("PROGRAM P VAR x : INT; END_VAR EXIT; END_PROGRAM");
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("EXIT is only valid inside a loop"))
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("EXIT is only valid inside a loop")
-        ));
     }
 
     #[test]
     fn test_exit_inside_loop_ok() {
         assert_no_errors(
             "PROGRAM P VAR x : INT := 0; END_VAR \
-             WHILE x < 10 DO x := x + 1; EXIT; END_WHILE; END_PROGRAM"
+             WHILE x < 10 DO x := x + 1; EXIT; END_WHILE; END_PROGRAM",
         );
     }
 
@@ -1265,11 +1379,13 @@ mod tests {
     fn test_case_requires_integer() {
         let ctx = assert_has_errors(
             "PROGRAM P VAR r : REAL; END_VAR \
-             CASE r OF 0: r := 1.0; END_CASE; END_PROGRAM"
+             CASE r OF 0: r := 1.0; END_CASE; END_PROGRAM",
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("CASE selector must be integer")
-        ));
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("CASE selector must be integer"))
+        );
     }
 
     // ── Function declarations ───────────────────────────────────
@@ -1280,7 +1396,7 @@ mod tests {
             "FUNCTION Add : INT \
              VAR_INPUT a : INT; b : INT; END_VAR \
              Add := a + b; \
-             END_FUNCTION"
+             END_FUNCTION",
         );
     }
 
@@ -1290,7 +1406,7 @@ mod tests {
     fn test_array_access_valid() {
         assert_no_errors(
             "PROGRAM P VAR a : ARRAY[0..9] OF INT; i : INT; END_VAR \
-             a[i] := a[i] + 1; END_PROGRAM"
+             a[i] := a[i] + 1; END_PROGRAM",
         );
     }
 
@@ -1298,24 +1414,28 @@ mod tests {
     fn test_array_access_non_integer_index() {
         let ctx = assert_has_errors(
             "PROGRAM P VAR a : ARRAY[0..9] OF INT; r : REAL; END_VAR \
-             a[r] := 0; END_PROGRAM"
+             a[r] := 0; END_PROGRAM",
         );
-        assert!(ctx.diagnostics.iter().any(|d|
-            d.message.contains("array index must be integer")
-        ));
+        assert!(
+            ctx.diagnostics
+                .iter()
+                .any(|d| d.message.contains("array index must be integer"))
+        );
     }
 
     // ── Realistic program ───────────────────────────────────────
 
     #[test]
     fn test_conveyor_control() {
-        assert_no_errors(r#"
+        assert_no_errors(
+            r#"
 PROGRAM ConveyorControl
 VAR
     speed : REAL := 0.0;
     running : BOOL := FALSE;
     count : INT := 0;
     limit : INT := 1000;
+    i : INT;
     sensor_vals : ARRAY[0..7] OF DINT;
 END_VAR
 
@@ -1334,7 +1454,8 @@ FOR i := 0 TO 7 BY 1 DO
 END_FOR;
 
 END_PROGRAM
-"#);
+"#,
+        );
     }
 
     // ── Numeric promotion ───────────────────────────────────────

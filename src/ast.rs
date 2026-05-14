@@ -303,33 +303,33 @@ pub enum Expression {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BinaryOperator {
     // Arithmetic
-    Add,        // +
-    Sub,        // -
-    Mul,        // *
-    Div,        // /
-    Mod,        // MOD
-    Power,      // **
+    Add,   // +
+    Sub,   // -
+    Mul,   // *
+    Div,   // /
+    Mod,   // MOD
+    Power, // **
 
     // Comparison
-    Eq,         // =
-    Neq,        // <>
-    Lt,         // <
-    Le,         // <=
-    Gt,         // >
-    Ge,         // >=
+    Eq,  // =
+    Neq, // <>
+    Lt,  // <
+    Le,  // <=
+    Gt,  // >
+    Ge,  // >=
 
     // Boolean / Bitwise
-    And,        // AND, &
-    Or,         // OR
-    Xor,        // XOR
+    And, // AND, &
+    Or,  // OR
+    Xor, // XOR
 }
 
 /// Unary operators.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UnaryOperator {
-    Neg,        // -
-    Pos,        // + (no-op, but parsed)
-    Not,        // NOT
+    Neg, // -
+    Pos, // + (no-op, but parsed)
+    Not, // NOT
 }
 
 // ─── Display implementations for debugging ──────────────────────
@@ -337,25 +337,25 @@ pub enum UnaryOperator {
 impl fmt::Display for ElementaryType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Bool  => write!(f, "BOOL"),
-            Self::Sint  => write!(f, "SINT"),
-            Self::Int   => write!(f, "INT"),
-            Self::Dint  => write!(f, "DINT"),
-            Self::Lint  => write!(f, "LINT"),
+            Self::Bool => write!(f, "BOOL"),
+            Self::Sint => write!(f, "SINT"),
+            Self::Int => write!(f, "INT"),
+            Self::Dint => write!(f, "DINT"),
+            Self::Lint => write!(f, "LINT"),
             Self::Usint => write!(f, "USINT"),
-            Self::Uint  => write!(f, "UINT"),
+            Self::Uint => write!(f, "UINT"),
             Self::Udint => write!(f, "UDINT"),
             Self::Ulint => write!(f, "ULINT"),
-            Self::Real  => write!(f, "REAL"),
+            Self::Real => write!(f, "REAL"),
             Self::Lreal => write!(f, "LREAL"),
-            Self::Byte  => write!(f, "BYTE"),
-            Self::Word  => write!(f, "WORD"),
+            Self::Byte => write!(f, "BYTE"),
+            Self::Word => write!(f, "WORD"),
             Self::Dword => write!(f, "DWORD"),
             Self::Lword => write!(f, "LWORD"),
-            Self::Time  => write!(f, "TIME"),
-            Self::Date  => write!(f, "DATE"),
-            Self::Tod   => write!(f, "TOD"),
-            Self::Dt    => write!(f, "DT"),
+            Self::Time => write!(f, "TIME"),
+            Self::Date => write!(f, "DATE"),
+            Self::Tod => write!(f, "TOD"),
+            Self::Dt => write!(f, "DT"),
         }
     }
 }
@@ -363,21 +363,21 @@ impl fmt::Display for ElementaryType {
 impl fmt::Display for BinaryOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Add   => write!(f, "+"),
-            Self::Sub   => write!(f, "-"),
-            Self::Mul   => write!(f, "*"),
-            Self::Div   => write!(f, "/"),
-            Self::Mod   => write!(f, "MOD"),
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Mod => write!(f, "MOD"),
             Self::Power => write!(f, "**"),
-            Self::Eq    => write!(f, "="),
-            Self::Neq   => write!(f, "<>"),
-            Self::Lt    => write!(f, "<"),
-            Self::Le    => write!(f, "<="),
-            Self::Gt    => write!(f, ">"),
-            Self::Ge    => write!(f, ">="),
-            Self::And   => write!(f, "AND"),
-            Self::Or    => write!(f, "OR"),
-            Self::Xor   => write!(f, "XOR"),
+            Self::Eq => write!(f, "="),
+            Self::Neq => write!(f, "<>"),
+            Self::Lt => write!(f, "<"),
+            Self::Le => write!(f, "<="),
+            Self::Gt => write!(f, ">"),
+            Self::Ge => write!(f, ">="),
+            Self::And => write!(f, "AND"),
+            Self::Or => write!(f, "OR"),
+            Self::Xor => write!(f, "XOR"),
         }
     }
 }

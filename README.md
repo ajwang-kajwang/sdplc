@@ -1,188 +1,159 @@
 # SD-PLC
 
-A cross-platform IEC 61131-3 Structured Text compiler written in Rust, targeting LLVM IR for native code generation across heterogeneous industrial hardware.
+A Rust IEC 61131-3 Structured Text compiler and runtime validation prototype targeting LLVM IR.
 
 ## Overview
 
-SD-PLC compiles IEC 61131-3 Structured Text programs through LLVM to produce native binaries for multiple processor architectures — from x86\_64 development machines down to ARMv5TE industrial IoT boards. The goal is a vendor-agnostic, field-deployable control platform that maintains deterministic execution while enabling modern DevOps workflows.
+SD-PLC compiles Structured Text through a conventional compiler pipeline:
 
-### Current Status
-
-| Stage | Status |
-|-------|--------|
-| Lexer | ✅ Complete — full IEC 61131-3:2025 ST coverage |
-| Parser / AST | ✅ Complete — recursive descent with precedence climbing |
-| Semantic Analysis | ✅ Complete — type resolution, scope validation, LLVM type mapping |
-| LLVM IR Generation | ✅ Complete — inkwell codegen for all ST constructs |
-| Runtime | ✅ Complete — JIT scan cycle executor with terminal dashboard |
-| OPC UA | 🔲 Planned |
-
-### Target Architectures
-
-| Platform | Architecture | Tier |
-|----------|-------------|------|
-| Development laptop | x86\_64 | Tier 1 |
-| Jetson Orin Nano | ARMv8.2-A (Cortex-A78AE) | Tier 1 |
-| Raspberry Pi 4 | ARMv8-A (Cortex-A72) | Tier 1 |
-| Nuvoton NUC980 | ARMv5TE (ARM926EJ-S) | Tier 2 |
-
-
-## Building
-
-```bash
-cargo build
+```text
+Structured Text source
+  -> lexer
+  -> parser / AST
+  -> semantic analyser
+  -> LLVM IR code generation
+  -> deterministic runtime / validation harness
 ```
 
-## Running
+The current thesis-focused branch narrows the project toward vendor-agnostic ST compilation, scan-cycle runtime evidence, flotation-tank simulation telemetry, and OPC UA address-space mapping.
+
+## Current Status
+
+| Area | Status |
+|------|--------|
+| Lexer | Complete: ST tokens, comments, literals, control-flow keywords |
+| Parser / AST | Complete: POUs, variables, expressions, arrays, control flow |
+| Semantic analysis | Complete: type resolution, scope validation, diagnostics |
+| LLVM IR generation | Complete: representative ST constructs via inkwell |
+| Runtime | Available: JIT scan-cycle executor exposed as `runtime` |
+| Process image | Available: typed deterministic process variable store |
+| Validation harness | Available: flotation simulation and timing CSV output |
+| OPC UA | Scaffolded: address-space CSV mapping, server backend pending |
+
+## Build And Test
+
+```bash
+cargo fmt
+cargo test
+```
+
+Sprint 1 validation commands:
+
+```bash
+cargo run --bin validate_sim -- --cycles=1000 --scan-time=10
+cargo run --bin sdplc -- programs/control_flow.st -o results/control_flow
+cargo run --bin runtime -- programs/control_flow.st --cycles=100 --scan-time=10 -q
+```
+
+The validation runner writes:
+
+```text
+results/scan_timing.csv
+results/flotation_tank_telemetry.csv
+results/opcua_address_space.csv
+```
+
+## Running The Compiler
 
 Compile a Structured Text file:
 
 ```bash
-# Compile an ST file → output.ll + output.bc
-sdplc programs/hello.st
-
-# Custom output name
-sdplc programs/pid_controller.st -o build/pid
-
-# Print LLVM IR to stdout (useful for piping to llc)
-sdplc programs/flotation_column.st --emit-ir
-
-# Quiet mode (errors only)
-sdplc -q programs/hello.st
-
-# Run built-in demo (no arguments)
-sdplc
+cargo run --bin sdplc -- programs/control_flow.st
 ```
 
-### Example Programs
-
-The `examples/` directory contains ready-to-compile ST programs:
-
-| File | Description |
-|------|-------------|
-| `hello.st` | Minimal counter program — start here |
-| `pid_controller.st` | PID function block with anti-windup |
-| `multi_pou.st` | Functions, FBs, and programs in one file |
-| `all_control_flow.st` | Every ST control flow construct |
-| `flotation_column.st` | Rougher flotation column — thesis validation target |
-
-## Runtime (Live Execution)
-
-The runtime JIT-compiles an ST program and executes it in a deterministic scan cycle loop with a live terminal dashboard:
+Write a custom output name:
 
 ```bash
-# Run with default 100ms scan cycle
-cargo run --bin runtime -- programs/hello.st
-
-# 50ms scan cycle
-cargo run --bin runtime -- programs/flotation_column.st --scan-time=50
-
-# Run exactly 500 cycles then stop
-cargo run --bin runtime -- programs/hello.st --cycles=500
-
-# Quiet mode (summary only)
-cargo run --bin runtime -- programs/hello.st --cycles=100 -q
+cargo run --bin sdplc -- programs/control_flow.st -o results/control_flow
 ```
 
-The dashboard shows all PROGRAM variables updating in real time:
+Print LLVM IR to stdout:
 
-```
-══ SD-PLC Runtime ══  ConveyorControl  Scan: 100ms  Cycle: #347
-   Uptime: 34.7s  Exec: 1.2µs  Jitter avg: 0.3µs  max: 12.1µs
-
- Variable                 Type           Value
- ──────────────────────────────────────────────────
- speed                    REAL          67.3200
- running                  BOOL            TRUE
- count                    INT              347
- limit                    INT             1000
- i                        INT                8
+```bash
+cargo run --bin sdplc -- programs/control_flow.st --emit-ir
 ```
 
+Run the built-in demo:
+
+```bash
+cargo run --bin sdplc
+```
+
+## Runtime
+
+The runtime JIT-compiles an ST program and executes it in a scan-cycle loop:
+
+```bash
+cargo run --bin runtime -- programs/control_flow.st --scan-time=50
+cargo run --bin runtime -- programs/control_flow.st --cycles=500
+cargo run --bin runtime -- programs/control_flow.st --cycles=100 -q
+```
+
+In interactive mode, the dashboard shows PROGRAM variables, scan timing, and final values. Quiet mode prints the summary only, which is useful for repeatable validation runs.
+
+## Validation Harness
+
+`validate_sim` runs the deterministic flotation-tank model without requiring hardware. It records scan timing metrics, telemetry, and the OPC UA node mapping scaffold:
+
+```bash
+cargo run --bin validate_sim -- --cycles=1000 --scan-time=10
+```
+
+Useful options:
+
+```bash
+--cycles=N       Number of scan cycles to execute, default 1000
+--scan-time=MS   Scan period in milliseconds, default 10
+--out=DIR        Output directory, default results
 ```
 
 ## Project Structure
 
+```text
 sdplc/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   ├── developer_guide.md          # Codebase walkthrough with line numbers
-│   └── multi_language_design.md    # Design: LD/FBD/SFC via PLCopen XML
-├── examples/
-│   ├── hello.st                    # Minimal program
-│   ├── pid_controller.st           # PID function block
-│   ├── multi_pou.st               # Multiple POUs in one file
-│   ├── all_control_flow.st        # Every control flow construct
-│   └── flotation_column.st        # Thesis validation target
-├── programs/                       # YOUR working .st files
-├── src/
-│   ├── main.rs         # CLI compiler driver (sdplc binary)
-│   ├── bin/
-│   │   └── runtime.rs  # JIT scan cycle executor (runtime binary)
-│   ├── lib.rs          # Crate root — exports modules
-│   ├── ast.rs          # AST node definitions
-│   ├── codegen.rs      # LLVM IR generation via inkwell
-│   ├── lexer.rs        # IEC 61131-3 ST lexer
-│   ├── parser.rs       # Recursive descent parser
-│   └── semantic.rs     # Type resolution, scope validation, type checking
-└── tests/
-    ├── lexer_integration_test.rs
-    ├── parser_integration_test.rs
-    ├── semantic_integration_test.rs
-    └── codegen_integration_test.rs
+|-- Cargo.toml
+|-- README.md
+|-- docs/
+|   `-- sprint_roadmap.md
+|-- programs/
+|   `-- control_flow.st
+|-- src/
+|   |-- main.rs              # compiler CLI (`sdplc`)
+|   |-- bin/
+|   |   |-- runtime.rs       # JIT scan-cycle runtime
+|   |   `-- validate_sim.rs  # flotation validation runner
+|   |-- ast.rs
+|   |-- codegen.rs
+|   |-- lexer.rs
+|   |-- parser.rs
+|   |-- semantic.rs
+|   |-- process_image.rs
+|   |-- timing.rs
+|   |-- simulation.rs
+|   `-- opcua_bridge.rs
+`-- tests/
+    |-- lexer_integration.rs
+    |-- parser_integration.rs
+    |-- sementic_integration.rs
+    `-- codegen_integration_test.rs
+```
 
-## Compiling to Native Code
+## Compiling To Native Code
 
-After `cargo run` generates `output.ll` and `output.bc`, use LLVM tools to compile for any target:
+After the compiler generates `.ll` and `.bc` files, use LLVM tools to target a native platform:
 
 ```bash
-# Native (development machine)
-llc output.ll -o output.s
-gcc output.s -o conveyor
-
-# ARMv8 (Jetson Orin Nano / Raspberry Pi 4)
-llc output.ll -mtriple=aarch64-linux-gnu -o output_arm64.s
-aarch64-linux-gnu-gcc output_arm64.s -o conveyor_arm64
-
-# ARMv5TE (Nuvoton NUC980)
-llc output.ll -mtriple=armv5te-linux-gnueabi -o output_armv5.s
-
-# WebAssembly
-llc output.ll -mtriple=wasm32-unknown-unknown -o output.wasm
+llc results/control_flow.ll -o results/control_flow.s
+gcc results/control_flow.s -o results/control_flow
 ```
 
-**Same Structured Text source** compiles to native binaries for all four target architectures through a single LLVM IR representation.
+Cross-compilation is handled by LLVM target triples, for example:
 
-## Compilation Pipeline
+```bash
+llc results/control_flow.ll -mtriple=aarch64-linux-gnu -o results/control_flow_arm64.s
+llc results/control_flow.ll -mtriple=armv5te-linux-gnueabi -o results/control_flow_armv5.s
+```
 
-```
-IEC 61131-3 ST Source
-        │
-        ▼
-   ┌─────────┐
-   │  Lexer   │  ✅
-   └────┬─────┘
-        │ Token stream
-        ▼
-   ┌─────────┐
-   │  Parser  │  ✅  → Abstract Syntax Tree
-   └────┬─────┘
-        │
-        ▼
-   ┌──────────────┐
-   │   Semantic    │  ✅  → Type checking, scope validation
-   │   Analysis    │
-   └──────┬───────┘
-          │
-          ▼
-   ┌──────────────┐
-   │ LLVM Codegen  │  ✅  → Platform-independent IR (inkwell)
-   └──────┬───────┘
-          │
-     ┌────┴────┐
-     ▼         ▼
-  Native    WebAssembly
-  (x86,     (portable,
-   ARM)      sandboxed)
-```
+## Roadmap
+
+The active completion plan is in [docs/sprint_roadmap.md](docs/sprint_roadmap.md). Sprint 1 is focused on build stability, validation CSV generation, runtime binary exposure, and matching repository documentation.

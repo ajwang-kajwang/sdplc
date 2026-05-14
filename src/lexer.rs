@@ -15,7 +15,6 @@
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     // ── Special ──
-
     /// End of input — the final token emitted by the lexer.
     Eof,
     /// An unrecognised character or sequence that does not match
@@ -23,7 +22,6 @@ pub enum TokenType {
     Unknown,
 
     // ── Identifiers & Literals ──
-
     /// A user-defined identifier such as a variable, function, or
     /// program name (e.g. `MyCounter`, `speed_ref`).
     Ident,
@@ -56,7 +54,6 @@ pub enum TokenType {
     BoolLiteral,
 
     // ── Program Organisation Units ──
-
     /// `PROGRAM` keyword — begins a program declaration.
     Program,
     /// `END_PROGRAM` keyword — terminates a program declaration.
@@ -71,7 +68,6 @@ pub enum TokenType {
     EndFunctionBlock,
 
     // ── Variable Declarations ──
-
     /// `VAR` keyword — begins a local variable block.
     Var,
     /// `END_VAR` keyword — terminates any variable block.
@@ -96,7 +92,6 @@ pub enum TokenType {
     At,
 
     // ── Data Type Keywords ──
-
     /// `BOOL` — 1-bit boolean type.
     TypeBool,
     /// `SINT` — 8-bit signed integer.
@@ -141,7 +136,6 @@ pub enum TokenType {
     TypeDt,
 
     // ── User-Defined Types ──
-
     /// `TYPE` keyword — begins a type declaration.
     Type,
     /// `END_TYPE` keyword — terminates a type declaration.
@@ -157,7 +151,6 @@ pub enum TokenType {
     Of,
 
     // ── Control Flow ──
-
     /// `IF` keyword — begins a conditional statement.
     If,
     /// `THEN` keyword — separates condition from body.
@@ -198,7 +191,6 @@ pub enum TokenType {
     Return,
 
     // ── Boolean / Bitwise Operators (keyword form) ──
-
     /// `AND` keyword — logical/bitwise AND. Also matched by `&`.
     And,
     /// `OR` keyword — logical/bitwise OR.
@@ -211,7 +203,6 @@ pub enum TokenType {
     Mod,
 
     // ── Arithmetic Operators ──
-
     /// `+` — addition or unary plus.
     Plus,
     /// `-` — subtraction or unary minus.
@@ -224,7 +215,6 @@ pub enum TokenType {
     Power,
 
     // ── Comparison Operators ──
-
     /// `=` — equality comparison.
     Equal,
     /// `<>` — inequality comparison.
@@ -239,7 +229,6 @@ pub enum TokenType {
     GreaterEq,
 
     // ── Assignment & Connectors ──
-
     /// `:=` — variable assignment.
     Assignment,
     /// `=>` — output assignment in function block calls.
@@ -248,7 +237,6 @@ pub enum TokenType {
     Arrow,
 
     // ── Delimiters ──
-
     /// `:` — type separator in declarations.
     Colon,
     /// `;` — statement terminator.
@@ -456,87 +444,92 @@ impl Lexer {
         let upper = text.to_ascii_uppercase();
 
         let kind = match upper.as_str() {
-            "PROGRAM"            => TokenType::Program,
-            "END_PROGRAM"        => TokenType::EndProgram,
-            "FUNCTION"           => TokenType::Function,
-            "END_FUNCTION"       => TokenType::EndFunction,
-            "FUNCTION_BLOCK"     => TokenType::FunctionBlock,
+            "PROGRAM" => TokenType::Program,
+            "END_PROGRAM" => TokenType::EndProgram,
+            "FUNCTION" => TokenType::Function,
+            "END_FUNCTION" => TokenType::EndFunction,
+            "FUNCTION_BLOCK" => TokenType::FunctionBlock,
             "END_FUNCTION_BLOCK" => TokenType::EndFunctionBlock,
 
-            "VAR"                => TokenType::Var,
-            "END_VAR"            => TokenType::EndVar,
-            "VAR_INPUT"          => TokenType::VarInput,
-            "VAR_OUTPUT"         => TokenType::VarOutput,
-            "VAR_IN_OUT"         => TokenType::VarInOut,
-            "VAR_GLOBAL"         => TokenType::VarGlobal,
-            "VAR_EXTERNAL"       => TokenType::VarExternal,
-            "VAR_TEMP"           => TokenType::VarTemp,
-            "RETAIN"             => TokenType::Retain,
-            "CONSTANT"           => TokenType::Constant,
-            "AT"                 => TokenType::At,
+            "VAR" => TokenType::Var,
+            "END_VAR" => TokenType::EndVar,
+            "VAR_INPUT" => TokenType::VarInput,
+            "VAR_OUTPUT" => TokenType::VarOutput,
+            "VAR_IN_OUT" => TokenType::VarInOut,
+            "VAR_GLOBAL" => TokenType::VarGlobal,
+            "VAR_EXTERNAL" => TokenType::VarExternal,
+            "VAR_TEMP" => TokenType::VarTemp,
+            "RETAIN" => TokenType::Retain,
+            "CONSTANT" => TokenType::Constant,
+            "AT" => TokenType::At,
 
-            "BOOL"               => TokenType::TypeBool,
-            "SINT"               => TokenType::TypeSint,
-            "INT"                => TokenType::TypeInt,
-            "DINT"               => TokenType::TypeDint,
-            "LINT"               => TokenType::TypeLint,
-            "USINT"              => TokenType::TypeUsint,
-            "UINT"               => TokenType::TypeUint,
-            "UDINT"              => TokenType::TypeUdint,
-            "ULINT"              => TokenType::TypeUlint,
-            "REAL"               => TokenType::TypeReal,
-            "LREAL"              => TokenType::TypeLreal,
-            "BYTE"               => TokenType::TypeByte,
-            "WORD"               => TokenType::TypeWord,
-            "DWORD"              => TokenType::TypeDword,
-            "LWORD"              => TokenType::TypeLword,
-            "STRING"             => TokenType::TypeString,
-            "WSTRING"            => TokenType::TypeWstring,
-            "TIME"               => TokenType::TypeTime,
-            "DATE"               => TokenType::TypeDate,
+            "BOOL" => TokenType::TypeBool,
+            "SINT" => TokenType::TypeSint,
+            "INT" => TokenType::TypeInt,
+            "DINT" => TokenType::TypeDint,
+            "LINT" => TokenType::TypeLint,
+            "USINT" => TokenType::TypeUsint,
+            "UINT" => TokenType::TypeUint,
+            "UDINT" => TokenType::TypeUdint,
+            "ULINT" => TokenType::TypeUlint,
+            "REAL" => TokenType::TypeReal,
+            "LREAL" => TokenType::TypeLreal,
+            "BYTE" => TokenType::TypeByte,
+            "WORD" => TokenType::TypeWord,
+            "DWORD" => TokenType::TypeDword,
+            "LWORD" => TokenType::TypeLword,
+            "STRING" => TokenType::TypeString,
+            "WSTRING" => TokenType::TypeWstring,
+            "TIME" => TokenType::TypeTime,
+            "DATE" => TokenType::TypeDate,
             "TIME_OF_DAY" | "TOD" => TokenType::TypeTod,
             "DATE_AND_TIME" | "DT" => TokenType::TypeDt,
 
-            "TYPE"               => TokenType::Type,
-            "END_TYPE"           => TokenType::EndType,
-            "STRUCT"             => TokenType::Struct,
-            "END_STRUCT"         => TokenType::EndStruct,
-            "ARRAY"              => TokenType::Array,
-            "OF"                 => TokenType::Of,
+            "TYPE" => TokenType::Type,
+            "END_TYPE" => TokenType::EndType,
+            "STRUCT" => TokenType::Struct,
+            "END_STRUCT" => TokenType::EndStruct,
+            "ARRAY" => TokenType::Array,
+            "OF" => TokenType::Of,
 
-            "IF"                 => TokenType::If,
-            "THEN"               => TokenType::Then,
-            "ELSIF"              => TokenType::Elsif,
-            "ELSE"               => TokenType::Else,
-            "END_IF"             => TokenType::EndIf,
-            "CASE"               => TokenType::Case,
-            "END_CASE"           => TokenType::EndCase,
-            "FOR"                => TokenType::For,
-            "TO"                 => TokenType::To,
-            "BY"                 => TokenType::By,
-            "DO"                 => TokenType::Do,
-            "END_FOR"            => TokenType::EndFor,
-            "WHILE"              => TokenType::While,
-            "END_WHILE"          => TokenType::EndWhile,
-            "REPEAT"             => TokenType::Repeat,
-            "UNTIL"              => TokenType::Until,
-            "END_REPEAT"         => TokenType::EndRepeat,
-            "EXIT"               => TokenType::Exit,
-            "RETURN"             => TokenType::Return,
+            "IF" => TokenType::If,
+            "THEN" => TokenType::Then,
+            "ELSIF" => TokenType::Elsif,
+            "ELSE" => TokenType::Else,
+            "END_IF" => TokenType::EndIf,
+            "CASE" => TokenType::Case,
+            "END_CASE" => TokenType::EndCase,
+            "FOR" => TokenType::For,
+            "TO" => TokenType::To,
+            "BY" => TokenType::By,
+            "DO" => TokenType::Do,
+            "END_FOR" => TokenType::EndFor,
+            "WHILE" => TokenType::While,
+            "END_WHILE" => TokenType::EndWhile,
+            "REPEAT" => TokenType::Repeat,
+            "UNTIL" => TokenType::Until,
+            "END_REPEAT" => TokenType::EndRepeat,
+            "EXIT" => TokenType::Exit,
+            "RETURN" => TokenType::Return,
 
-            "AND"                => TokenType::And,
-            "OR"                 => TokenType::Or,
-            "XOR"                => TokenType::Xor,
-            "NOT"                => TokenType::Not,
-            "MOD"                => TokenType::Mod,
+            "AND" => TokenType::And,
+            "OR" => TokenType::Or,
+            "XOR" => TokenType::Xor,
+            "NOT" => TokenType::Not,
+            "MOD" => TokenType::Mod,
 
-            "TRUE"               => TokenType::BoolLiteral,
-            "FALSE"              => TokenType::BoolLiteral,
+            "TRUE" => TokenType::BoolLiteral,
+            "FALSE" => TokenType::BoolLiteral,
 
             _ => TokenType::Ident,
         };
 
-        Token { kind, text, line: start_line, col: start_col }
+        Token {
+            kind,
+            text,
+            line: start_line,
+            col: start_col,
+        }
     }
 
     // ── Numeric literal scanner ─────────────────────────────────
@@ -568,7 +561,12 @@ impl Lexer {
                 self.advance();
                 self.eat_hex_digits();
                 let text: String = self.input[start_pos..self.position].iter().collect();
-                return Token { kind: TokenType::IntLiteral, text, line: start_line, col: start_col };
+                return Token {
+                    kind: TokenType::IntLiteral,
+                    text,
+                    line: start_line,
+                    col: start_col,
+                };
             }
         }
 
@@ -592,8 +590,17 @@ impl Lexer {
         }
 
         let text: String = self.input[start_pos..self.position].iter().collect();
-        let kind = if is_real { TokenType::RealLiteral } else { TokenType::IntLiteral };
-        Token { kind, text, line: start_line, col: start_col }
+        let kind = if is_real {
+            TokenType::RealLiteral
+        } else {
+            TokenType::IntLiteral
+        };
+        Token {
+            kind,
+            text,
+            line: start_line,
+            col: start_col,
+        }
     }
 
     /// Consumes consecutive decimal digits and underscores.
@@ -656,7 +663,12 @@ impl Lexer {
         } else {
             TokenType::WStringLiteral
         };
-        Token { kind, text, line: start_line, col: start_col }
+        Token {
+            kind,
+            text,
+            line: start_line,
+            col: start_col,
+        }
     }
 
     // ── Time / Date literal scanner ─────────────────────────────
@@ -686,13 +698,18 @@ impl Lexer {
         let text: String = self.input[start_pos..self.position].iter().collect();
         let upper_prefix = prefix.to_ascii_uppercase();
         let kind = match upper_prefix.as_str() {
-            "T" | "TIME"                    => TokenType::TimeLiteral,
-            "D" | "DATE"                    => TokenType::DateLiteral,
-            "TOD" | "TIME_OF_DAY"           => TokenType::TodLiteral,
-            "DT" | "DATE_AND_TIME"          => TokenType::DtLiteral,
+            "T" | "TIME" => TokenType::TimeLiteral,
+            "D" | "DATE" => TokenType::DateLiteral,
+            "TOD" | "TIME_OF_DAY" => TokenType::TodLiteral,
+            "DT" | "DATE_AND_TIME" => TokenType::DtLiteral,
             _ => TokenType::Ident,
         };
-        Token { kind, text, line: start_line, col: start_col }
+        Token {
+            kind,
+            text,
+            line: start_line,
+            col: start_col,
+        }
     }
 
     // ── Main tokeniser entry point ──────────────────────────────
@@ -706,12 +723,14 @@ impl Lexer {
 
         let c = match self.current_char {
             Some(ch) => ch,
-            None => return Token {
-                kind: TokenType::Eof,
-                text: String::new(),
-                line: self.line,
-                col: self.col,
-            },
+            None => {
+                return Token {
+                    kind: TokenType::Eof,
+                    text: String::new(),
+                    line: self.line,
+                    col: self.col,
+                };
+            }
         };
 
         let start_line = self.line;
@@ -724,7 +743,8 @@ impl Lexer {
             let upper = tok.text.to_ascii_uppercase();
             if self.current_char == Some('#') {
                 match upper.as_str() {
-                    "T" | "TIME" | "D" | "DATE" | "TOD" | "TIME_OF_DAY" | "DT" | "DATE_AND_TIME" => {
+                    "T" | "TIME" | "D" | "DATE" | "TOD" | "TIME_OF_DAY" | "DT"
+                    | "DATE_AND_TIME" => {
                         return self.scan_temporal_literal(&tok.text);
                     }
                     _ => {}
@@ -751,49 +771,89 @@ impl Lexer {
         if c == ':' && self.peek() == Some('=') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::Assignment, text: ":=".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::Assignment,
+                text: ":=".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '=' && self.peek() == Some('>') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::OutputAssign, text: "=>".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::OutputAssign,
+                text: "=>".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '*' && self.peek() == Some('*') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::Power, text: "**".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::Power,
+                text: "**".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '<' && self.peek() == Some('>') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::NotEqual, text: "<>".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::NotEqual,
+                text: "<>".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '<' && self.peek() == Some('=') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::LessEq, text: "<=".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::LessEq,
+                text: "<=".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '>' && self.peek() == Some('=') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::GreaterEq, text: ">=".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::GreaterEq,
+                text: ">=".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '-' && self.peek() == Some('>') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::Arrow, text: "->".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::Arrow,
+                text: "->".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         if c == '.' && self.peek() == Some('.') {
             self.advance();
             self.advance();
-            return Token { kind: TokenType::DotDot, text: "..".into(), line: start_line, col: start_col };
+            return Token {
+                kind: TokenType::DotDot,
+                text: "..".into(),
+                line: start_line,
+                col: start_col,
+            };
         }
 
         // ── Single-character tokens ──
@@ -818,10 +878,15 @@ impl Lexer {
             '.' => TokenType::Dot,
             '#' => TokenType::Hash,
             '&' => TokenType::Ampersand,
-            _   => TokenType::Unknown,
+            _ => TokenType::Unknown,
         };
 
-        Token { kind, text, line: start_line, col: start_col }
+        Token {
+            kind,
+            text,
+            line: start_line,
+            col: start_col,
+        }
     }
 
     // ── Convenience: collect all tokens ─────────────────────────
@@ -863,91 +928,145 @@ mod tests {
     fn test_original_example() {
         let tokens = lex("PROGRAM MyFirstPLC VAR count : INT := 0; END_VAR");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::Program, TokenType::Ident, TokenType::Var,
-            TokenType::Ident, TokenType::Colon, TokenType::TypeInt,
-            TokenType::Assignment, TokenType::IntLiteral,
-            TokenType::SemiColon, TokenType::EndVar, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::Program,
+                TokenType::Ident,
+                TokenType::Var,
+                TokenType::Ident,
+                TokenType::Colon,
+                TokenType::TypeInt,
+                TokenType::Assignment,
+                TokenType::IntLiteral,
+                TokenType::SemiColon,
+                TokenType::EndVar,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
     fn test_case_insensitivity() {
         let tokens = lex("program var int end_var end_program");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::Program, TokenType::Var, TokenType::TypeInt,
-            TokenType::EndVar, TokenType::EndProgram, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::Program,
+                TokenType::Var,
+                TokenType::TypeInt,
+                TokenType::EndVar,
+                TokenType::EndProgram,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
     fn test_block_comment() {
         let tokens = lex("VAR (* this is a comment *) END_VAR");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![TokenType::Var, TokenType::EndVar, TokenType::Eof]);
+        assert_eq!(
+            kinds,
+            vec![TokenType::Var, TokenType::EndVar, TokenType::Eof]
+        );
     }
 
     #[test]
     fn test_nested_block_comment() {
         let tokens = lex("VAR (* outer (* inner *) still comment *) END_VAR");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![TokenType::Var, TokenType::EndVar, TokenType::Eof]);
+        assert_eq!(
+            kinds,
+            vec![TokenType::Var, TokenType::EndVar, TokenType::Eof]
+        );
     }
 
     #[test]
     fn test_line_comment() {
         let tokens = lex("VAR // this is ignored\nEND_VAR");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![TokenType::Var, TokenType::EndVar, TokenType::Eof]);
+        assert_eq!(
+            kinds,
+            vec![TokenType::Var, TokenType::EndVar, TokenType::Eof]
+        );
     }
 
     #[test]
     fn test_comparison_operators() {
         let tokens = lex("a < b <= c > d >= e = f <> g");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::Ident, TokenType::Less,
-            TokenType::Ident, TokenType::LessEq,
-            TokenType::Ident, TokenType::Greater,
-            TokenType::Ident, TokenType::GreaterEq,
-            TokenType::Ident, TokenType::Equal,
-            TokenType::Ident, TokenType::NotEqual,
-            TokenType::Ident, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::Ident,
+                TokenType::Less,
+                TokenType::Ident,
+                TokenType::LessEq,
+                TokenType::Ident,
+                TokenType::Greater,
+                TokenType::Ident,
+                TokenType::GreaterEq,
+                TokenType::Ident,
+                TokenType::Equal,
+                TokenType::Ident,
+                TokenType::NotEqual,
+                TokenType::Ident,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
     fn test_multi_char_operators() {
         let tokens = lex(":= => ** -> ..");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::Assignment, TokenType::OutputAssign,
-            TokenType::Power, TokenType::Arrow,
-            TokenType::DotDot, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::Assignment,
+                TokenType::OutputAssign,
+                TokenType::Power,
+                TokenType::Arrow,
+                TokenType::DotDot,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
     fn test_boolean_and_keyword_operators() {
         let tokens = lex("TRUE AND FALSE OR NOT XOR MOD");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::BoolLiteral, TokenType::And,
-            TokenType::BoolLiteral, TokenType::Or,
-            TokenType::Not, TokenType::Xor, TokenType::Mod,
-            TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::BoolLiteral,
+                TokenType::And,
+                TokenType::BoolLiteral,
+                TokenType::Or,
+                TokenType::Not,
+                TokenType::Xor,
+                TokenType::Mod,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
     fn test_real_literals() {
         let tokens = lex("3.14 1.0e-3 42.0E+2");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::RealLiteral, TokenType::RealLiteral,
-            TokenType::RealLiteral, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::RealLiteral,
+                TokenType::RealLiteral,
+                TokenType::RealLiteral,
+                TokenType::Eof,
+            ]
+        );
         assert_eq!(tokens[0].1, "3.14");
         assert_eq!(tokens[1].1, "1.0e-3");
         assert_eq!(tokens[2].1, "42.0E+2");
@@ -957,10 +1076,15 @@ mod tests {
     fn test_based_integers() {
         let tokens = lex("16#FF 8#77 2#1010");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::IntLiteral, TokenType::IntLiteral,
-            TokenType::IntLiteral, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::IntLiteral,
+                TokenType::IntLiteral,
+                TokenType::IntLiteral,
+                TokenType::Eof,
+            ]
+        );
         assert_eq!(tokens[0].1, "16#FF");
         assert_eq!(tokens[1].1, "8#77");
         assert_eq!(tokens[2].1, "2#1010");
@@ -1025,10 +1149,15 @@ mod tests {
     fn test_typed_literal_produces_separate_tokens() {
         let tokens = lex("INT#5");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::TypeInt, TokenType::Hash,
-            TokenType::IntLiteral, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::TypeInt,
+                TokenType::Hash,
+                TokenType::IntLiteral,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
@@ -1085,12 +1214,22 @@ mod tests {
     fn test_array_declaration() {
         let tokens = lex("arr : ARRAY[0..9] OF INT");
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::Ident, TokenType::Colon, TokenType::Array,
-            TokenType::LBracket, TokenType::IntLiteral, TokenType::DotDot,
-            TokenType::IntLiteral, TokenType::RBracket,
-            TokenType::Of, TokenType::TypeInt, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::Ident,
+                TokenType::Colon,
+                TokenType::Array,
+                TokenType::LBracket,
+                TokenType::IntLiteral,
+                TokenType::DotDot,
+                TokenType::IntLiteral,
+                TokenType::RBracket,
+                TokenType::Of,
+                TokenType::TypeInt,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
@@ -1108,20 +1247,36 @@ mod tests {
         let src = "BOOL SINT INT DINT LINT USINT UINT UDINT ULINT REAL LREAL BYTE WORD DWORD LWORD STRING WSTRING TIME DATE";
         let tokens = lex(src);
         let kinds: Vec<TokenType> = tokens.iter().map(|t| t.0).collect();
-        assert_eq!(kinds, vec![
-            TokenType::TypeBool, TokenType::TypeSint, TokenType::TypeInt,
-            TokenType::TypeDint, TokenType::TypeLint, TokenType::TypeUsint,
-            TokenType::TypeUint, TokenType::TypeUdint, TokenType::TypeUlint,
-            TokenType::TypeReal, TokenType::TypeLreal, TokenType::TypeByte,
-            TokenType::TypeWord, TokenType::TypeDword, TokenType::TypeLword,
-            TokenType::TypeString, TokenType::TypeWstring, TokenType::TypeTime,
-            TokenType::TypeDate, TokenType::Eof,
-        ]);
+        assert_eq!(
+            kinds,
+            vec![
+                TokenType::TypeBool,
+                TokenType::TypeSint,
+                TokenType::TypeInt,
+                TokenType::TypeDint,
+                TokenType::TypeLint,
+                TokenType::TypeUsint,
+                TokenType::TypeUint,
+                TokenType::TypeUdint,
+                TokenType::TypeUlint,
+                TokenType::TypeReal,
+                TokenType::TypeLreal,
+                TokenType::TypeByte,
+                TokenType::TypeWord,
+                TokenType::TypeDword,
+                TokenType::TypeLword,
+                TokenType::TypeString,
+                TokenType::TypeWstring,
+                TokenType::TypeTime,
+                TokenType::TypeDate,
+                TokenType::Eof,
+            ]
+        );
     }
 
     #[test]
     fn test_line_tracking() {
-        let tokens = lex("VAR\n  x : INT;\nEND_VAR");
+        let tokens = Lexer::new("VAR\n  x : INT;\nEND_VAR").tokenize();
         assert_eq!(tokens[0].line, 1);
         assert_eq!(tokens[1].line, 2);
         assert_eq!(tokens[4].line, 2);
@@ -1153,7 +1308,14 @@ END_PROGRAM
         let mut lexer = Lexer::new(src);
         let tokens = lexer.tokenize();
         for t in &tokens {
-            assert_ne!(t.kind, TokenType::Unknown, "Unknown token: '{}' at {}:{}", t.text, t.line, t.col);
+            assert_ne!(
+                t.kind,
+                TokenType::Unknown,
+                "Unknown token: '{}' at {}:{}",
+                t.text,
+                t.line,
+                t.col
+            );
         }
         assert_eq!(tokens.first().unwrap().kind, TokenType::Program);
         assert_eq!(tokens[tokens.len() - 2].kind, TokenType::EndProgram);

@@ -26,7 +26,8 @@ END_PROGRAM
     let tokens = lexer.tokenize();
 
     // No unknown tokens
-    let unknown: Vec<_> = tokens.iter()
+    let unknown: Vec<_> = tokens
+        .iter()
         .filter(|t| t.kind == TokenType::Unknown)
         .collect();
     assert!(
@@ -70,7 +71,10 @@ END_FUNCTION_BLOCK
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize();
 
-    let unknown_count = tokens.iter().filter(|t| t.kind == TokenType::Unknown).count();
+    let unknown_count = tokens
+        .iter()
+        .filter(|t| t.kind == TokenType::Unknown)
+        .count();
     assert_eq!(unknown_count, 0, "Unexpected unknown tokens in FB program");
 
     // Verify key structural tokens are present
@@ -113,7 +117,10 @@ END_PROGRAM
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize();
 
-    let unknown_count = tokens.iter().filter(|t| t.kind == TokenType::Unknown).count();
+    let unknown_count = tokens
+        .iter()
+        .filter(|t| t.kind == TokenType::Unknown)
+        .count();
     assert_eq!(unknown_count, 0);
 
     let kinds: Vec<TokenType> = tokens.iter().map(|t| t.kind).collect();
@@ -154,7 +161,10 @@ END_PROGRAM
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize();
 
-    let unknown_count = tokens.iter().filter(|t| t.kind == TokenType::Unknown).count();
+    let unknown_count = tokens
+        .iter()
+        .filter(|t| t.kind == TokenType::Unknown)
+        .count();
     assert_eq!(unknown_count, 0);
 
     // Verify range and comma tokens appear
@@ -181,7 +191,10 @@ END_TYPE
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize();
 
-    let unknown_count = tokens.iter().filter(|t| t.kind == TokenType::Unknown).count();
+    let unknown_count = tokens
+        .iter()
+        .filter(|t| t.kind == TokenType::Unknown)
+        .count();
     assert_eq!(unknown_count, 0);
 
     let kinds: Vec<TokenType> = tokens.iter().map(|t| t.kind).collect();
@@ -212,13 +225,23 @@ END_PROGRAM
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize();
 
-    let unknown_count = tokens.iter().filter(|t| t.kind == TokenType::Unknown).count();
+    let unknown_count = tokens
+        .iter()
+        .filter(|t| t.kind == TokenType::Unknown)
+        .count();
     assert_eq!(unknown_count, 0);
 
-    let time_tokens: Vec<_> = tokens.iter()
-        .filter(|t| matches!(t.kind,
-            TokenType::TimeLiteral | TokenType::DateLiteral |
-            TokenType::TodLiteral  | TokenType::DtLiteral))
+    let time_tokens: Vec<_> = tokens
+        .iter()
+        .filter(|t| {
+            matches!(
+                t.kind,
+                TokenType::TimeLiteral
+                    | TokenType::DateLiteral
+                    | TokenType::TodLiteral
+                    | TokenType::DtLiteral
+            )
+        })
         .collect();
 
     assert_eq!(time_tokens.len(), 4, "Expected 4 temporal literals");
@@ -245,11 +268,15 @@ END_PROGRAM
     let tokens = lexer.tokenize();
 
     // Comments should be stripped — only code tokens remain
-    let unknown_count = tokens.iter().filter(|t| t.kind == TokenType::Unknown).count();
+    let unknown_count = tokens
+        .iter()
+        .filter(|t| t.kind == TokenType::Unknown)
+        .count();
     assert_eq!(unknown_count, 0);
 
     // x and y should both be present as identifiers
-    let idents: Vec<_> = tokens.iter()
+    let idents: Vec<_> = tokens
+        .iter()
         .filter(|t| t.kind == TokenType::Ident)
         .map(|t| t.text.as_str())
         .collect();
@@ -282,5 +309,9 @@ fn test_token_count_stability() {
     let source = "PROGRAM P VAR x : INT := 0; END_VAR END_PROGRAM";
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize();
-    assert_eq!(tokens.len(), 12, "Token count changed — review lexer changes");
+    assert_eq!(
+        tokens.len(),
+        12,
+        "Token count changed — review lexer changes"
+    );
 }
