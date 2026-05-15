@@ -107,14 +107,16 @@ impl FlotationTankSim {
     }
 
     pub fn write_to_image(&self, image: &mut ProcessImage) {
-        let _ = image.set("tank.level", PlcValue::F64(self.level));
-        let _ = image.set("tank.air_flow", PlcValue::F64(self.air_flow));
-        let _ = image.set("tank.feed_flow", PlcValue::F64(self.feed_flow));
-        let _ = image.set("tank.tailings_flow", PlcValue::F64(self.tailings_flow));
-        // read-only variable is intentionally not updated through ProcessImage::set
-        if let Some(var) = image.iter().find(|v| v.name == "tank.concentrate_grade") {
-            let _ = var;
-        }
+        let _ = image.refresh("tank.level", PlcValue::F64(self.level));
+        let _ = image.refresh("tank.air_flow", PlcValue::F64(self.air_flow));
+        let _ = image.refresh("tank.feed_flow", PlcValue::F64(self.feed_flow));
+        let _ = image.refresh("tank.tailings_flow", PlcValue::F64(self.tailings_flow));
+        let _ = image.refresh(
+            "tank.concentrate_grade",
+            PlcValue::F64(self.concentrate_grade),
+        );
+        let _ = image.refresh("tank.emergency_stop", PlcValue::Bool(self.emergency_stop));
+        let _ = image.refresh("tank.motor_running", PlcValue::Bool(self.motor_running));
     }
 
     pub fn telemetry_csv_header() -> &'static str {

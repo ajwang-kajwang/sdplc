@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+async-opcua-client = "0.18.0"
+async-opcua-server = "0.18.0"
+async-opcua-types = "0.18.0"
 inkwell = { version = "0.4.0", features = ["llvm17-0"] }
+tokio = { version = "1", features = ["full"] }
 
 [[bin]]
 name = "sdplc"
@@ -17,3 +21,11 @@ path = "src/bin/runtime.rs"
 [[bin]]
 name = "validate_sim"
 path = "src/bin/validate_sim.rs"
+
+[[bin]]
+name = "opcua_server"
+path = "src/bin/opcua_server.rs"
+
+[[bin]]
+name = "sprint4_validation"
+path = "src/bin/sprint4_validation.rs"

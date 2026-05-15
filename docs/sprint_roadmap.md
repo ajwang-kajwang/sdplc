@@ -42,11 +42,34 @@ This branch adds the support modules needed to move from a compiler-only reposit
   - Converts process variables to node specifications such as `ns=2;s=SDPLC.tank.level`.
   - Backend-neutral by design so the next sprint can bind it to `open62541` or a Rust OPC UA server crate.
 
+- `src/bin/opcua_server.rs`
+  - Pure Rust OPC UA server backend using `async-opcua-server`.
+  - Exposes flotation tank and runtime variables under `Objects/SDPLC`.
+  - Supports OPC UA reads for all exported nodes.
+  - Supports OPC UA writes for writable tank process variables through `ProcessImage` callbacks.
+  - Provides `--self-test` wire validation using `async-opcua-client`.
+  - Writes:
+    - `results/opcua_address_space.csv`
+    - `results/opcua_read_values.csv`
+    - `results/opcua_client_smoke.csv`
+    - `results/opcua_test_notes.md`
+
 - `src/bin/validate_sim.rs`
   - Validation runner producing:
     - `results/scan_timing.csv`
     - `results/flotation_tank_telemetry.csv`
     - `results/opcua_address_space.csv`
+
+- `examples/flotation_tank.st`
+  - Compilable Structured Text flotation-tank control example for runtime validation.
+
+### Sprint 2 update
+
+- `CodeGenerator::compile_for_runtime` now exposes scalar PROGRAM variables with runtime getter/setter metadata.
+- `runtime` builds a typed `ProcessImage` from compiled PROGRAM variables and refreshes it after every scan.
+- `runtime` writes:
+  - `results/runtime_scan_timing.csv`
+  - `results/runtime_final_values.csv`
 
 - `Cargo.toml`
   - Explicitly exposes:
@@ -62,9 +85,11 @@ cargo test
 cargo run --bin validate_sim -- --cycles=1000 --scan-time=10
 cargo run --bin sdplc -- programs/control_flow.st -o results/control_flow
 cargo run --bin runtime -- programs/control_flow.st --cycles=100 --scan-time=10 -q
+cargo run --bin runtime -- examples/flotation_tank.st --cycles=1000 --scan-time=10 -q
+cargo run --bin opcua_server -- examples/flotation_tank.st --scan-time=10 --self-test
 ```
 
-If `runtime` fails to compile, first check whether `src/codegen.rs` actually exposes `compile_for_runtime`. `src/runtime.rs` currently expects that symbol. If it is missing, Sprint 2 must either implement it or temporarily modify `runtime` to call the existing `compile` path.
+If `runtime` fails to compile, first check the runtime-codegen bridge between `src/codegen.rs::compile_for_runtime` and `src/bin/runtime.rs`.
 
 ## Sprint plan
 
@@ -91,12 +116,15 @@ cargo run --bin validate_sim -- --cycles=1000 --scan-time=10
 
 Target: next working session.
 
+Status: complete in the current workspace.
+
 Deliverables:
 
 - Runtime creates a `ProcessImage` from compiled PROGRAM variables.
 - Compiled scan execution updates process-image variables after every cycle.
 - Flotation Tank ST example can be run through the runtime.
 - Runtime can export `results/runtime_scan_timing.csv`.
+- Runtime can export `results/runtime_final_values.csv`.
 
 Implementation notes:
 
@@ -126,6 +154,8 @@ results/runtime_final_values.csv
 ### Sprint 3: OPC UA server backend
 
 Target: mid-week.
+
+Status: backend and Rust OPC UA wire self-test complete in the current workspace. Manual UaExpert browse screenshot remains useful for thesis/demo evidence.
 
 Deliverables:
 
@@ -164,7 +194,26 @@ Evidence to save:
 ```text
 results/opcua_browse_screenshot.png
 results/opcua_read_values.csv
+results/opcua_client_smoke.csv
 results/opcua_test_notes.md
+```
+
+Current server command:
+
+```bash
+cargo run --bin opcua_server -- examples/flotation_tank.st --scan-time=10
+```
+
+Wire self-test command:
+
+```bash
+cargo run --bin opcua_server -- examples/flotation_tank.st --scan-time=10 --self-test
+```
+
+Default endpoint:
+
+```text
+opc.tcp://127.0.0.1:4855/
 ```
 
 ### Sprint 4: Thesis-grade validation
@@ -195,13 +244,21 @@ Definition of done:
 
 ```text
 results/
+  compiler_pipeline_benchmark.csv
   scan_timing_10ms.csv
   scan_timing_20ms.csv
   scan_timing_50ms.csv
+  control_flow_scan_timing_10ms.csv
   flotation_tank_telemetry.csv
   opcua_read_latency.csv
   opcua_write_latency.csv
   validation_summary.md
+```
+
+Repeatable Sprint 4 command:
+
+```bash
+cargo run --bin sprint4_validation -- --cycles=1000
 ```
 
 ## Thesis positioning
@@ -248,4 +305,4 @@ Plus a short results pack showing:
 - compiler success;
 - runtime scan-cycle measurements;
 - flotation tank telemetry trends;
-- OPC UA client browse/read evidence.
+- OPC UA client browse/read/write evidence.

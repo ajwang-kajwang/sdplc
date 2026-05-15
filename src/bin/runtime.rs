@@ -12,7 +12,7 @@
 use std::env;
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{Duration, Instant};
 
@@ -23,8 +23,10 @@ use inkwell::execution_engine::JitFunction;
 use sdplc::codegen::{CodeGenerator, RuntimeVar};
 use sdplc::lexer::Lexer;
 use sdplc::parser::Parser;
+use sdplc::process_image::{PlcValue, ProcessImage, ProcessVariable};
 use sdplc::semantic;
 use sdplc::semantic::ResolvedType;
+use sdplc::timing::ScanTiming;
 
 // ─── JIT function signature ─────────────────────────────────────
 
@@ -48,6 +50,7 @@ fn main() {
     let mut scan_time_ms: u64 = 100;
     let mut max_cycles: Option<u64> = None;
     let mut quiet = false;
+    let mut output_dir = PathBuf::from("results");
 
     let mut i = 1;
     while i < args.len() {
@@ -64,6 +67,8 @@ fn main() {
             }));
         } else if arg == "-q" || arg == "--quiet" {
             quiet = true;
+        } else if let Some(val) = arg.strip_prefix("--out=") {
+            output_dir = PathBuf::from(val);
         } else if arg.starts_with('-') {
             eprintln!("error: unknown option '{}'", arg);
             process::exit(1);
@@ -97,6 +102,7 @@ fn main() {
         if let Some(n) = max_cycles {
             println!("Max cycles: {}", n);
         }
+        println!("Output:    {}", output_dir.display());
         println!();
     }
 
@@ -197,9 +203,8 @@ fn main() {
     let getters: Vec<(&RuntimeVar, JitFunction<GetterFn>)> = runtime_vars
         .iter()
         .filter_map(|var| {
-            let getter_name = format!("__get_{}", var.name);
             let getter: JitFunction<GetterFn> =
-                unsafe { execution_engine.get_function(&getter_name) }.ok()?;
+                unsafe { execution_engine.get_function(&var.getter_fn_name) }.ok()?;
             Some((var, getter))
         })
         .collect();
@@ -213,11 +218,12 @@ fn main() {
         init_fn.call();
     }
 
+    let mut process_image = build_process_image(&getters);
+
     // ── Scan cycle loop ──
     let scan_duration = Duration::from_millis(scan_time_ms);
     let mut cycle: u64 = 0;
-    let mut jitter_sum: f64 = 0.0;
-    let mut jitter_max: f64 = 0.0;
+    let mut timing = ScanTiming::new(scan_duration);
     let runtime_start = Instant::now();
 
     // Install Ctrl+C handler via atomic flag
@@ -244,23 +250,8 @@ fn main() {
 
         let exec_time = cycle_start.elapsed();
 
-        // ── Read all variables ──
-        let values: Vec<f64> = getters
-            .iter()
-            .map(|(_, getter)| unsafe { getter.call() })
-            .collect();
-
-        // ── Timing ──
-        let cycle_elapsed = cycle_start.elapsed();
-        let jitter_us = if cycle_elapsed > scan_duration {
-            (cycle_elapsed - scan_duration).as_micros() as f64
-        } else {
-            0.0
-        };
-        jitter_sum += jitter_us;
-        if jitter_us > jitter_max {
-            jitter_max = jitter_us;
-        }
+        // ── Refresh process image ──
+        refresh_process_image(&mut process_image, &getters);
 
         cycle += 1;
 
@@ -278,23 +269,21 @@ fn main() {
                 "   Uptime: {:.1}s  Exec: {:.1}µs  Jitter avg: {:.1}µs  max: {:.1}µs\n",
                 total_elapsed.as_secs_f64(),
                 exec_time.as_micros() as f64,
-                if cycle > 0 {
-                    jitter_sum / cycle as f64
-                } else {
-                    0.0
-                },
-                jitter_max,
+                timing.avg_jitter_us(),
+                timing.max_jitter_us(),
             );
 
             // Variable table
             println!(" {:<24} {:<10} {:>14}", "Variable", "Type", "Value");
             println!(" {}", "─".repeat(50));
 
-            for (i, (var, _)) in getters.iter().enumerate() {
-                let val = values[i];
-                let type_str = format_type_short(&var.resolved_type);
-                let val_str = format_value(val, &var.resolved_type);
-                println!(" {:<24} {:<10} {:>14}", var.name, type_str, val_str);
+            for var in process_image.iter() {
+                println!(
+                    " {:<24} {:<10} {:>14}",
+                    var.name,
+                    var.value.type_name(),
+                    var.value
+                );
             }
 
             println!("\n Press Ctrl+C to stop.");
@@ -306,22 +295,36 @@ fn main() {
         if elapsed < scan_duration {
             std::thread::sleep(scan_duration - elapsed);
         }
+        timing.record_cycle(exec_time, cycle_start.elapsed());
     }
 
     // ── Summary ──
     let total = runtime_start.elapsed();
+    fs::create_dir_all(&output_dir).unwrap_or_else(|e| {
+        eprintln!("error: cannot create '{}': {}", output_dir.display(), e);
+        process::exit(1);
+    });
+    let timing_path = output_dir.join("runtime_scan_timing.csv");
+    let values_path = output_dir.join("runtime_final_values.csv");
+    fs::write(
+        &timing_path,
+        format!("{}\n{}\n", ScanTiming::csv_header(), timing.csv_row()),
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("error: cannot write '{}': {}", timing_path.display(), e);
+        process::exit(1);
+    });
+    fs::write(&values_path, process_image_csv(&process_image)).unwrap_or_else(|e| {
+        eprintln!("error: cannot write '{}': {}", values_path.display(), e);
+        process::exit(1);
+    });
     println!("\n── Runtime Summary ──");
     println!("  Cycles:     {}", cycle);
     println!("  Uptime:     {:.3}s", total.as_secs_f64());
-    println!(
-        "  Avg jitter: {:.1}µs",
-        if cycle > 0 {
-            jitter_sum / cycle as f64
-        } else {
-            0.0
-        }
-    );
-    println!("  Max jitter: {:.1}µs", jitter_max);
+    println!("  Avg exec:   {:.1} us", timing.avg_exec_us());
+    println!("  Max exec:   {:.1} us", timing.max_exec_us());
+    println!("  Avg jitter: {:.1} us", timing.avg_jitter_us());
+    println!("  Max jitter: {:.1} us", timing.max_jitter_us());
     if cycle > 0 {
         println!(
             "  Avg cycle:  {:.3}ms",
@@ -331,40 +334,79 @@ fn main() {
 
     // Print final variable values
     println!("\n  Final values:");
-    for (i, (var, _)) in getters.iter().enumerate() {
-        let val = unsafe { getters[i].1.call() };
-        let val_str = format_value(val, &var.resolved_type);
-        println!("    {} = {}", var.name, val_str);
+    for var in process_image.iter() {
+        println!("    {} = {}", var.name, var.value);
+    }
+    println!("\n  Wrote: {}", timing_path.display());
+    println!("  Wrote: {}", values_path.display());
+}
+
+fn build_process_image(bindings: &[(&RuntimeVar, JitFunction<GetterFn>)]) -> ProcessImage {
+    let mut image = ProcessImage::new();
+    for (var, getter) in bindings {
+        let raw = unsafe { getter.call() };
+        let value = plc_value_from_f64(raw, &var.resolved_type);
+        image.insert(
+            ProcessVariable::new(var.name.clone(), value).with_description(format!(
+                "Compiled ST PROGRAM variable {}.{}",
+                var.program_name, var.name
+            )),
+        );
+    }
+    image
+}
+
+fn refresh_process_image(
+    image: &mut ProcessImage,
+    bindings: &[(&RuntimeVar, JitFunction<GetterFn>)],
+) {
+    for (var, getter) in bindings {
+        let raw = unsafe { getter.call() };
+        let value = plc_value_from_f64(raw, &var.resolved_type);
+        let _ = image.set(&var.name, value);
+    }
+}
+
+fn plc_value_from_f64(raw: f64, rt: &ResolvedType) -> PlcValue {
+    match rt {
+        ResolvedType::Bool => PlcValue::Bool(raw != 0.0),
+        ResolvedType::Float { .. } => PlcValue::F64(raw),
+        ResolvedType::UnsignedInt { .. } | ResolvedType::BitString { .. } => {
+            PlcValue::U64(raw as u64)
+        }
+        ResolvedType::SignedInt { .. }
+        | ResolvedType::Time
+        | ResolvedType::Date
+        | ResolvedType::Tod
+        | ResolvedType::Dt => PlcValue::I64(raw as i64),
+        _ => PlcValue::Text(format_value(raw, rt)),
+    }
+}
+
+fn process_image_csv(image: &ProcessImage) -> String {
+    let mut rows = vec!["name,type,value,writable,description".to_string()];
+    rows.extend(image.iter().map(|var| {
+        format!(
+            "{},{},{},{},{}",
+            csv_field(&var.name),
+            var.value.type_name(),
+            csv_field(&var.value.to_string()),
+            var.writable,
+            csv_field(&var.description)
+        )
+    }));
+    rows.join("\n") + "\n"
+}
+
+fn csv_field(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
     }
 }
 
 // ─── Formatting ─────────────────────────────────────────────────
-
-fn format_type_short(rt: &ResolvedType) -> &'static str {
-    match rt {
-        ResolvedType::Bool => "BOOL",
-        ResolvedType::SignedInt { bits: 8 } => "SINT",
-        ResolvedType::SignedInt { bits: 16 } => "INT",
-        ResolvedType::SignedInt { bits: 32 } => "DINT",
-        ResolvedType::SignedInt { bits: 64 } => "LINT",
-        ResolvedType::UnsignedInt { bits: 8 } => "USINT",
-        ResolvedType::UnsignedInt { bits: 16 } => "UINT",
-        ResolvedType::UnsignedInt { bits: 32 } => "UDINT",
-        ResolvedType::UnsignedInt { bits: 64 } => "ULINT",
-        ResolvedType::Float { bits: 32 } => "REAL",
-        ResolvedType::Float { bits: 64 } => "LREAL",
-        ResolvedType::BitString { bits: 8 } => "BYTE",
-        ResolvedType::BitString { bits: 16 } => "WORD",
-        ResolvedType::BitString { bits: 32 } => "DWORD",
-        ResolvedType::BitString { bits: 64 } => "LWORD",
-        ResolvedType::Time => "TIME",
-        ResolvedType::Date => "DATE",
-        ResolvedType::Tod => "TOD",
-        ResolvedType::Dt => "DT",
-        ResolvedType::Array { .. } => "ARRAY",
-        _ => "???",
-    }
-}
 
 fn format_value(val: f64, rt: &ResolvedType) -> String {
     match rt {
@@ -402,6 +444,7 @@ fn print_usage() {
     println!("  runtime <input.st>                      Run with 100ms scan cycle");
     println!("  runtime <input.st> --scan-time=50        50ms scan cycle");
     println!("  runtime <input.st> --cycles=1000         Stop after 1000 cycles");
+    println!("  runtime <input.st> --out=results         Write runtime CSV artefacts");
     println!("  runtime <input.st> -q                    Quiet (summary only)\n");
     println!("The runtime compiles the ST program, JIT-executes it in a");
     println!("repeating scan cycle, and displays live variable values.");

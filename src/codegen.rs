@@ -75,6 +75,10 @@ pub struct RuntimeVar {
     pub resolved_type: ResolvedType,
     /// The name of the PROGRAM this variable belongs to.
     pub program_name: String,
+    /// Runtime getter symbol. The getter returns the variable as f64.
+    pub getter_fn_name: String,
+    /// Runtime setter symbol. Present for scalar writable values.
+    pub setter_fn_name: Option<String>,
 }
 
 // ─── Code Generator ─────────────────────────────────────────────
@@ -1513,8 +1517,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             for decl in &block.declarations {
                 let rt = Self::resolve_type(&decl.type_spec);
                 let lt = self.llvm_type(&rt);
+                let global_name = format!("__var_{}_{}", p.name, decl.name);
 
-                let global = self.module.add_global(lt, None, &decl.name);
+                let global = self.module.add_global(lt, None, &global_name);
                 global.set_initializer(&lt.const_zero());
 
                 self.variables.insert(
@@ -1526,11 +1531,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                     },
                 );
 
-                runtime_vars.push(RuntimeVar {
-                    name: decl.name.clone(),
-                    resolved_type: rt,
-                    program_name: p.name.clone(),
-                });
+                if Self::is_runtime_scalar(&rt) {
+                    runtime_vars.push(RuntimeVar {
+                        name: decl.name.clone(),
+                        resolved_type: rt,
+                        program_name: p.name.clone(),
+                        getter_fn_name: Self::runtime_accessor_name("get", &p.name, &decl.name),
+                        setter_fn_name: Some(Self::runtime_accessor_name(
+                            "set", &p.name, &decl.name,
+                        )),
+                    });
+                }
             }
         }
 
@@ -1571,20 +1582,45 @@ impl<'ctx> CodeGenerator<'ctx> {
         // Each getter loads the global and converts to f64 so the
         // runtime can read all variables with one uniform type.
         for var in &runtime_vars {
-            self.emit_runtime_getter(&var.name, &var.resolved_type)?;
+            self.emit_runtime_getter(&var.name, &var.resolved_type, &var.getter_fn_name)?;
+            if let Some(setter_fn_name) = &var.setter_fn_name {
+                self.emit_runtime_setter(&var.name, &var.resolved_type, setter_fn_name)?;
+            }
         }
 
         self.current_fn = None;
         Ok(runtime_vars)
     }
 
-    /// Emits `@__get_<name>() -> f64` that reads a global and
-    /// returns it as a double.
-    fn emit_runtime_getter(&mut self, name: &str, rt: &ResolvedType) -> CgResult<()> {
+    fn runtime_accessor_name(kind: &str, program_name: &str, variable_name: &str) -> String {
+        format!("__{}_{}_{}", kind, program_name, variable_name)
+    }
+
+    fn is_runtime_scalar(rt: &ResolvedType) -> bool {
+        matches!(
+            rt,
+            ResolvedType::Bool
+                | ResolvedType::SignedInt { .. }
+                | ResolvedType::UnsignedInt { .. }
+                | ResolvedType::BitString { .. }
+                | ResolvedType::Float { .. }
+                | ResolvedType::Time
+                | ResolvedType::Date
+                | ResolvedType::Tod
+                | ResolvedType::Dt
+        )
+    }
+
+    /// Emits a getter that reads a global and returns it as a double.
+    fn emit_runtime_getter(
+        &mut self,
+        name: &str,
+        rt: &ResolvedType,
+        fn_name: &str,
+    ) -> CgResult<()> {
         let f64_type = self.context.f64_type();
         let fn_type = f64_type.fn_type(&[], false);
-        let fn_name = format!("__get_{}", name);
-        let function = self.module.add_function(&fn_name, fn_type, None);
+        let function = self.module.add_function(fn_name, fn_type, None);
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
@@ -1615,10 +1651,74 @@ impl<'ctx> CodeGenerator<'ctx> {
                         .unwrap()
                 }
             }
+            ResolvedType::Time | ResolvedType::Date | ResolvedType::Tod | ResolvedType::Dt => self
+                .builder
+                .build_signed_int_to_float(raw.into_int_value(), f64_type, "ttof")
+                .unwrap(),
             _ => f64_type.const_float(0.0),
         };
 
         self.builder.build_return(Some(&as_f64)).unwrap();
+        Ok(())
+    }
+
+    /// Emits a setter that accepts an f64 and stores it in the global.
+    fn emit_runtime_setter(
+        &mut self,
+        name: &str,
+        rt: &ResolvedType,
+        fn_name: &str,
+    ) -> CgResult<()> {
+        let f64_type = self.context.f64_type();
+        let fn_type = self.context.void_type().fn_type(&[f64_type.into()], false);
+        let function = self.module.add_function(fn_name, fn_type, None);
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        let slot = self.variables[name].clone();
+        let input = function
+            .get_first_param()
+            .expect("runtime setter has one parameter")
+            .into_float_value();
+
+        let value = match rt {
+            ResolvedType::Float { bits: 64 } => input.into(),
+            ResolvedType::Float { .. } => self
+                .builder
+                .build_float_trunc(input, self.context.f32_type(), "ftrunc")
+                .unwrap()
+                .into(),
+            ResolvedType::Bool => {
+                let zero = f64_type.const_zero();
+                self.builder
+                    .build_float_compare(FloatPredicate::ONE, input, zero, "btobool")
+                    .unwrap()
+                    .into()
+            }
+            ResolvedType::UnsignedInt { bits } | ResolvedType::BitString { bits } => self
+                .builder
+                .build_float_to_unsigned_int(
+                    input,
+                    self.context.custom_width_int_type(*bits),
+                    "ftou",
+                )
+                .unwrap()
+                .into(),
+            ResolvedType::SignedInt { bits } => self
+                .builder
+                .build_float_to_signed_int(input, self.context.custom_width_int_type(*bits), "ftoi")
+                .unwrap()
+                .into(),
+            ResolvedType::Time | ResolvedType::Date | ResolvedType::Tod | ResolvedType::Dt => self
+                .builder
+                .build_float_to_signed_int(input, self.context.i64_type(), "ftot")
+                .unwrap()
+                .into(),
+            _ => self.zero_value(rt),
+        };
+
+        self.builder.build_store(slot.ptr, value).unwrap();
+        self.builder.build_return(None).unwrap();
         Ok(())
     }
 }
@@ -1644,6 +1744,21 @@ mod tests {
             .compile(&ast)
             .unwrap_or_else(|e| panic!("Codegen error: {}", e));
         codegen.ir_string()
+    }
+
+    fn compile_runtime(src: &str) -> (String, Vec<RuntimeVar>) {
+        let lexer = Lexer::new(src);
+        let mut parser = Parser::new(lexer);
+        let ast = parser
+            .parse()
+            .unwrap_or_else(|e| panic!("Parse error: {}", e));
+
+        let context = Context::create();
+        let mut codegen = CodeGenerator::new(&context, "test");
+        let vars = codegen
+            .compile_for_runtime(&ast)
+            .unwrap_or_else(|e| panic!("Codegen error: {}", e));
+        (codegen.ir_string(), vars)
     }
 
     #[test]
@@ -1745,6 +1860,25 @@ mod tests {
              a[i] := 42; END_PROGRAM",
         );
         assert!(ir.contains("getelementptr"));
+    }
+
+    #[test]
+    fn test_runtime_metadata_exposes_scalar_program_vars() {
+        let (ir, vars) = compile_runtime(
+            "PROGRAM P VAR x : DINT := 1; run : BOOL := TRUE; data : ARRAY[0..3] OF DINT; END_VAR \
+             x := x + 1; END_PROGRAM",
+        );
+
+        assert_eq!(vars.len(), 2);
+        assert!(vars.iter().any(|v| {
+            v.name == "x"
+                && v.getter_fn_name == "__get_P_x"
+                && v.setter_fn_name.as_deref() == Some("__set_P_x")
+        }));
+        assert!(vars.iter().any(|v| v.name == "run"));
+        assert!(ir.contains("define double @__get_P_x()"));
+        assert!(ir.contains("define void @__set_P_x(double"));
+        assert!(!vars.iter().any(|v| v.name == "data"));
     }
 
     #[test]

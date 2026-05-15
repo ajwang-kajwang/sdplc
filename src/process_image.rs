@@ -115,6 +115,18 @@ impl ProcessImage {
         }
     }
 
+    /// Refresh a value from trusted runtime/simulation code, even if the
+    /// variable is read-only to external clients.
+    pub fn refresh(&mut self, name: &str, value: PlcValue) -> Result<(), ProcessImageError> {
+        match self.variables.get_mut(name) {
+            Some(var) => {
+                var.value = value;
+                Ok(())
+            }
+            None => Err(ProcessImageError::Missing(name.to_string())),
+        }
+    }
+
     pub fn get(&self, name: &str) -> Option<&PlcValue> {
         self.variables.get(name).map(|v| &v.value)
     }
@@ -174,5 +186,18 @@ mod tests {
 
         image.set("level", PlcValue::F64(50.0)).unwrap();
         assert_eq!(image.get_f64("level"), Some(50.0));
+    }
+
+    #[test]
+    fn refresh_updates_read_only_values() {
+        let mut image = ProcessImage::new();
+        image.insert(ProcessVariable::new("grade", PlcValue::F64(82.0)).read_only());
+
+        assert_eq!(
+            image.set("grade", PlcValue::F64(83.0)),
+            Err(ProcessImageError::ReadOnly("grade".to_string()))
+        );
+        image.refresh("grade", PlcValue::F64(83.0)).unwrap();
+        assert_eq!(image.get_f64("grade"), Some(83.0));
     }
 }
