@@ -27,5 +27,5 @@ name = "opcua_server"
 path = "src/bin/opcua_server.rs"
 
 [[bin]]
-name = "sprint4_validation"
-path = "src/bin/sprint4_validation.rs"
+name = "demo_validation"
+path = "src/bin/demo_validation.rs"

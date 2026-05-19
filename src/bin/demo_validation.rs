@@ -1,4 +1,4 @@
-//! Sprint 4 validation pack runner.
+//! Demo validation pack runner.
 //!
 //! This orchestration binary produces the repeatable CSV and Markdown
 //! artefacts called out in docs/sprint_roadmap.md. It intentionally runs
@@ -57,7 +57,7 @@ struct CompilerMetric {
 fn main() {
     let config = parse_args();
     if let Err(err) = run(config) {
-        eprintln!("Sprint 4 validation failed: {err}");
+        eprintln!("Demo validation failed: {err}");
         std::process::exit(1);
     }
 }
@@ -126,7 +126,7 @@ fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
     write_summary(&config.output_dir, cycles, &results, config.skip_opcua)?;
 
-    println!("Sprint 4 validation pack complete");
+    println!("Demo validation pack complete");
     println!("  output: {}", config.output_dir.display());
     println!(
         "  summary: {}",
