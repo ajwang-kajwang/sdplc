@@ -1,0 +1,12 @@
+name,type,value,writable,description
+air_flow,LREAL,50.000458,true,Compiled ST PROGRAM variable FlotationTank.air_flow
+concentrate_grade,LREAL,82.750015,true,Compiled ST PROGRAM variable FlotationTank.concentrate_grade
+cycle,LINT,1000,true,Compiled ST PROGRAM variable FlotationTank.cycle
+emergency_stop,BOOL,FALSE,true,Compiled ST PROGRAM variable FlotationTank.emergency_stop
+feed_flow,LREAL,60.000458,true,Compiled ST PROGRAM variable FlotationTank.feed_flow
+high_level,BOOL,FALSE,true,Compiled ST PROGRAM variable FlotationTank.high_level
+level,LREAL,62.428951,true,Compiled ST PROGRAM variable FlotationTank.level
+low_air,BOOL,FALSE,true,Compiled ST PROGRAM variable FlotationTank.low_air
+motor_running,BOOL,TRUE,true,Compiled ST PROGRAM variable FlotationTank.motor_running
+tailings_flow,LREAL,37.300011,true,Compiled ST PROGRAM variable FlotationTank.tailings_flow
+target_level,LREAL,55.000000,true,Compiled ST PROGRAM variable FlotationTank.target_level

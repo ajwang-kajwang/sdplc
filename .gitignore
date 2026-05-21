@@ -1,5 +1,4 @@
 /target
-/results
 output.bc
 output.ll
 control_flow.bc
