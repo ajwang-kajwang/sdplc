@@ -45,28 +45,45 @@ cargo run --bin sdplc -- programs/control_flow.st -o results/control_flow
 cargo run --bin runtime -- programs/control_flow.st --cycles=100 --scan-time=10 -q
 cargo run --bin runtime -- examples/flotation_tank.st --cycles=1000 --scan-time=10 -q
 cargo run --bin opcua_server -- examples/flotation_tank.st --scan-time=10 --self-test
-cargo run --bin sprint4_validation -- --cycles=1000
+cargo run --bin demo_validation -- --cycles=1000
 ```
 
-The validation runner writes:
+The validation commands write evidence into the `results/` folder. The current
+evidence layout is:
 
 ```text
-results/scan_timing.csv
-results/flotation_tank_telemetry.csv
-results/opcua_address_space.csv
-results/opcua_read_values.csv
-results/opcua_client_smoke.csv
-results/opcua_test_notes.md
-results/runtime_scan_timing.csv
-results/runtime_final_values.csv
-results/compiler_pipeline_benchmark.csv
-results/scan_timing_10ms.csv
-results/scan_timing_20ms.csv
-results/scan_timing_50ms.csv
-results/control_flow_scan_timing_10ms.csv
-results/opcua_read_latency.csv
-results/opcua_write_latency.csv
-results/validation_summary.md
+results/
+|-- compiler_benchmark/
+|   `-- compiler_pipeline_benchmark.csv
+|-- compiler_ir/
+|   |-- control_flow/
+|   `-- flotation_tank/
+|-- runtime/
+|   |-- control_flow/
+|   |   `-- control_flow_scan_timing_10ms.csv
+|   |-- flotation_tank/
+|   |   |-- scan_timing_10ms.csv
+|   |   |-- scan_timing_20ms.csv
+|   |   `-- scan_timing_50ms.csv
+|   `-- latest/
+|       |-- runtime_final_values.csv
+|       `-- runtime_scan_timing.csv
+|-- simulation/
+|   `-- flotation_tank/
+|       |-- flotation_tank_telemetry.csv
+|       `-- scan_timing.csv
+|-- opcua/
+|   |-- address_space/
+|   |   |-- opcua_address_space.csv
+|   |   |-- opcua_read_values.csv
+|   |   `-- opcua_test_notes.md
+|   |-- latency/
+|   |   |-- opcua_read_latency.csv
+|   |   `-- opcua_write_latency.csv
+|   `-- self_test/
+|       `-- opcua_client_smoke.csv
+`-- validation/
+    `-- validation_summary.md
 ```
 
 ## Running The Compiler
@@ -106,7 +123,7 @@ cargo run --bin runtime -- programs/control_flow.st --cycles=100 -q
 cargo run --bin runtime -- examples/flotation_tank.st --cycles=1000 --scan-time=10 -q
 ```
 
-In interactive mode, the dashboard shows PROGRAM variables from the runtime `ProcessImage`, scan timing, and final values. Quiet mode prints the summary only, which is useful for repeatable validation runs. Every runtime run writes `results/runtime_scan_timing.csv` and `results/runtime_final_values.csv` by default; use `--out=DIR` to choose a different output directory.
+In interactive mode, the dashboard shows PROGRAM variables from the runtime `ProcessImage`, scan timing, and final values. Quiet mode prints the summary only, which is useful for repeatable validation runs. A default runtime run writes `runtime_scan_timing.csv` and `runtime_final_values.csv` inside the selected output directory. The current thesis evidence keeps the latest runtime files under `results/runtime/latest/`, with scan-period-specific evidence under `results/runtime/flotation_tank/`.
 
 ## Validation Harness
 
@@ -129,16 +146,16 @@ Useful options:
 Run the full thesis validation pack:
 
 ```bash
-cargo run --bin sprint4_validation -- --cycles=1000
+cargo run --bin demo_validation -- --cycles=1000
 ```
 
 For a short smoke run while developing:
 
 ```bash
-cargo run --bin sprint4_validation -- --quick --out=results_sprint4_quick
+cargo run --bin demo_validation -- --quick --out=results_sprint4_quick
 ```
 
-The full runner compiles the flotation and control-flow ST programs, runs the runtime scan-cycle matrix, records flotation telemetry, starts the OPC UA server self-test client, writes read/write latency CSVs, and creates `results/validation_summary.md`.
+The full runner compiles the flotation and control-flow ST programs, runs the runtime scan-cycle matrix, records flotation telemetry, starts the OPC UA server self-test client, writes read/write latency CSVs, and creates `results/validation/validation_summary.md`.
 
 ## OPC UA Server
 
@@ -159,7 +176,7 @@ Useful options:
 --out=DIR         Output directory, default results
 ```
 
-The endpoint is `opc.tcp://127.0.0.1:4855/` by default. The server writes `results/opcua_address_space.csv`, `results/opcua_read_values.csv`, and `results/opcua_test_notes.md` when it starts. With `--self-test`, it also writes `results/opcua_client_smoke.csv` after a real OPC UA client browse/read/write/read-back cycle. Writable tank nodes use OPC UA write callbacks that update the shared `ProcessImage`; runtime metrics and calculated grade remain read-only to clients.
+The endpoint is `opc.tcp://127.0.0.1:4855/` by default. The server writes address-space evidence, read-value evidence, and test notes into the selected output directory. The current thesis evidence keeps these files under `results/opcua/address_space/`. With `--self-test`, it also writes client smoke-test evidence and latency CSVs; the current thesis files are under `results/opcua/self_test/` and `results/opcua/latency/`. Writable tank nodes use OPC UA write callbacks that update the shared `ProcessImage`; runtime metrics and calculated grade remain read-only to clients.
 
 Sprint 4 latency options:
 
@@ -172,35 +189,103 @@ Sprint 4 latency options:
 
 ```text
 sdplc/
+|-- .cargo/
+|   `-- config.toml             # local Cargo / LLVM build configuration
 |-- Cargo.toml
+|-- Cargo.lock
 |-- README.md
+|-- benchmark/
+|   |-- convert_trace.py        # converts CODESYS Trace exports into comparison CSVs
+|   |-- codesys_flotation_10ms.csv
+|   |-- codesys_flotation_10ms_raw.csv
+|   |-- codesys_flotation_20ms.csv
+|   |-- codesys_flotation_20ms_raw.csv
+|   |-- codesys_flotation_50ms.csv
+|   |-- codesys_flotation_50ms_raw.csv
+|   `-- Program/
+|       |-- Floatation Tank.project
+|       |-- Floatation Tank-AllUsers.opt
+|       |-- Floatation Tank-kajwa-RYUTEI.opt
+|       |-- Floatation Tank_project.precompilecache
+|       |-- Floatation Tank.~u
+|       |-- *.simulation.bootinfo
+|       |-- *.simulation.bootinfo_guids
+|       `-- *.simulation.compileinfo
 |-- docs/
+|   |-- Developer Guide.md
 |   `-- sprint_roadmap.md
-|-- programs/
-|   `-- control_flow.st
 |-- examples/
 |   `-- flotation_tank.st
+|-- programs/
+|   `-- control_flow.st
+|-- results/
+|   |-- README.md
+|   |-- compiler_benchmark/
+|   |   `-- compiler_pipeline_benchmark.csv
+|   |-- compiler_ir/
+|   |   |-- control_flow/
+|   |   |   |-- control_flow.bc
+|   |   |   `-- control_flow.ll
+|   |   `-- flotation_tank/
+|   |       |-- flotation_tank.bc
+|   |       `-- flotation_tank.ll
+|   |-- runtime/
+|   |   |-- control_flow/
+|   |   |   `-- control_flow_scan_timing_10ms.csv
+|   |   |-- flotation_tank/
+|   |   |   |-- scan_timing_10ms.csv
+|   |   |   |-- scan_timing_20ms.csv
+|   |   |   `-- scan_timing_50ms.csv
+|   |   `-- latest/
+|   |       |-- runtime_final_values.csv
+|   |       `-- runtime_scan_timing.csv
+|   |-- simulation/
+|   |   `-- flotation_tank/
+|   |       |-- flotation_tank_telemetry.csv
+|   |       `-- scan_timing.csv
+|   |-- opcua/
+|   |   |-- address_space/
+|   |   |   |-- opcua_address_space.csv
+|   |   |   |-- opcua_read_values.csv
+|   |   |   `-- opcua_test_notes.md
+|   |   |-- latency/
+|   |   |   |-- opcua_read_latency.csv
+|   |   |   `-- opcua_write_latency.csv
+|   |   `-- self_test/
+|   |       `-- opcua_client_smoke.csv
+|   `-- validation/
+|       `-- validation_summary.md
 |-- src/
-|   |-- main.rs              # compiler CLI (`sdplc`)
+|   |-- main.rs                 # compiler CLI (`sdplc`)
+|   |-- lib.rs                  # shared library entry point
 |   |-- bin/
-|   |   |-- runtime.rs       # JIT scan-cycle runtime
-|   |   |-- opcua_server.rs  # OPC UA server backend
-|   |   |-- sprint4_validation.rs # Sprint 4 validation pack runner
-|   |   `-- validate_sim.rs  # flotation validation runner
-|   |-- ast.rs
-|   |-- codegen.rs
-|   |-- lexer.rs
-|   |-- parser.rs
-|   |-- semantic.rs
-|   |-- process_image.rs
-|   |-- timing.rs
-|   |-- simulation.rs
-|   `-- opcua_bridge.rs
-`-- tests/
-    |-- lexer_integration.rs
-    |-- parser_integration.rs
-    |-- sementic_integration.rs
-    `-- codegen_integration_test.rs
+|   |   |-- demo_validation.rs   # thesis validation pack runner
+|   |   |-- opcua_server.rs      # OPC UA server and self-test client
+|   |   |-- runtime.rs           # JIT scan-cycle runtime
+|   |   `-- validate_sim.rs      # flotation simulation validation runner
+|   |-- ast.rs                   # Structured Text AST definitions
+|   |-- lexer.rs                 # tokenisation
+|   |-- parser.rs                # POU, declaration and statement parsing
+|   |-- semantic.rs              # type checking and diagnostics
+|   |-- codegen.rs               # LLVM IR generation through inkwell
+|   |-- process_image.rs         # typed runtime process-image store
+|   |-- timing.rs                # scan-cycle timing metrics
+|   |-- simulation.rs            # deterministic flotation-tank model
+|   `-- opcua_bridge.rs          # process-image to OPC UA node mapping
+|-- tests/
+|   |-- lexer_integration.rs
+|   |-- parser_integration.rs
+|   |-- sementic_integration.rs
+|   `-- codegen_integration_test.rs
+`-- thesis_figures/
+    `-- chapter5/
+        |-- generate_chapter5_figures.py
+        `-- output/
+            |-- PLACEMENT_MAP.md
+            |-- figure_5_3_startup_level_codesys_vs_sdplc.png
+            |-- figure_5_4_airflow_grade_codesys_vs_sdplc.png
+            |-- figure_5_6_opcua_read_latency_histogram.png
+            `-- figure_5_7_opcua_write_latency_histogram.png
 ```
 
 ## Compiling To Native Code
