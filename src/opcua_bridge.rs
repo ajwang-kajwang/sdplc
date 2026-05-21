@@ -1,14 +1,10 @@
 //! OPC UA bridge scaffold for SD-PLC.
 //!
-//! The immediate sprint target is to expose the runtime process image through
-//! a browsable OPC UA address space. This module deliberately keeps the core
-//! address-space mapping independent from any specific OPC UA crate so the
-//! next sprint can bind it either to `open62541` through FFI or to a pure Rust
-//! server crate without changing validation code.
-
+//! Exposes the runtime process image through
+//! a browsable OPC UA address space. 
 use crate::process_image::{PlcValue, ProcessImage};
 
-/// Logical OPC UA node generated from a process-image variable.
+/// OPC UA node generated from a process-image variable.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpcUaNodeSpec {
     pub node_id: String,
@@ -88,8 +84,6 @@ fn opcua_type_name(value: &PlcValue) -> &'static str {
 }
 
 /// Minimal contract the concrete OPC UA server implementation must satisfy.
-///
-/// Sprint 2 should implement this trait for the selected server backend.
 pub trait OpcUaServerBackend {
     type Error;
 

@@ -6,3 +6,5 @@ control_flow.bc
 control_flow.ll
 demo.bc
 demo.ll
+/benchmark/program
+*docx
