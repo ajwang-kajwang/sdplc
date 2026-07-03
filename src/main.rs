@@ -88,7 +88,14 @@ fn main() {
         }
     };
 
-    let out_base = output_name.unwrap_or(source_name.clone());
+    let out_base = output_name.unwrap_or_else(|| {
+        Path::new("results")
+            .join("compiler_ir")
+            .join(&source_name)
+            .join(&source_name)
+            .to_string_lossy()
+            .into_owned()
+    });
 
     if !quiet {
         println!("═══ SD-PLC Compiler ═══\n");
@@ -249,7 +256,9 @@ fn main() {
 fn print_usage() {
     println!("SD-PLC — IEC 61131-3 Structured Text Compiler\n");
     println!("USAGE:");
-    println!("  sdplc <input.st>               Compile to LLVM IR");
+    println!(
+        "  sdplc <input.st>               Compile to results/compiler_ir/<name>/<name>.ll + .bc"
+    );
     println!("  sdplc <input.st> -o <name>     Custom output basename");
     println!("  sdplc <input.st> --emit-ir     Print IR to stdout");
     println!("  sdplc -q <input.st>            Quiet mode (errors only)");
@@ -259,8 +268,9 @@ fn print_usage() {
     println!("  Any .st or .txt file containing IEC 61131-3 Structured Text.");
     println!("  Multiple POUs (PROGRAM, FUNCTION, FUNCTION_BLOCK) per file.\n");
     println!("OUTPUT:");
-    println!("  <name>.ll    LLVM IR text (human-readable)");
-    println!("  <name>.bc    LLVM bitcode (for llc/opt)\n");
+    println!("  results/compiler_ir/<name>/<name>.ll    LLVM IR text (human-readable)");
+    println!("  results/compiler_ir/<name>/<name>.bc    LLVM bitcode (for llc/opt)");
+    println!("  -o <name> keeps custom output basenames supported\n");
     println!("EXAMPLES:");
     println!("  sdplc conveyor.st");
     println!("  sdplc conveyor.st -o build/conveyor");

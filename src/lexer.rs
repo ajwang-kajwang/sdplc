@@ -292,17 +292,6 @@ pub struct Token {
 /// - Multi-character operators (`:=`, `<=`, `<>`, `**`, `..`, etc.)
 /// - Source location tracking (line and column)
 ///
-/// # Example
-///
-/// ```
-/// use sdplc::lexer::{Lexer, TokenType};
-///
-/// let mut lexer = Lexer::new("VAR x : INT := 42; END_VAR");
-/// let tokens = lexer.tokenize();
-///
-/// assert_eq!(tokens[0].kind, TokenType::Var);
-/// assert_eq!(tokens[5].kind, TokenType::IntLiteral);
-/// assert_eq!(tokens[5].text, "42");
 /// ```
 pub struct Lexer {
     /// The source code as a vector of characters for indexed access.

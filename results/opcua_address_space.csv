@@ -1,0 +1,11 @@
+node_id,browse_name,data_type,writable,value,description
+ns=2;s=SDPLC.runtime.avg_exec_us,runtime.avg_exec_us,Double,false,0.000000,Average scan execution time in microseconds
+ns=2;s=SDPLC.runtime.cycle,runtime.cycle,UInt64,false,0,Runtime scan cycle count
+ns=2;s=SDPLC.runtime.max_jitter_us,runtime.max_jitter_us,Double,false,0.000000,Maximum scan jitter in microseconds
+ns=2;s=SDPLC.tank.air_flow,tank.air_flow,Double,true,30.000000,Air flow percentage
+ns=2;s=SDPLC.tank.concentrate_grade,tank.concentrate_grade,Double,false,82.000000,Simulated concentrate grade
+ns=2;s=SDPLC.tank.emergency_stop,tank.emergency_stop,Boolean,true,FALSE,Emergency stop input
+ns=2;s=SDPLC.tank.feed_flow,tank.feed_flow,Double,true,40.000000,Feed flow percentage
+ns=2;s=SDPLC.tank.level,tank.level,Double,true,50.000000,Tank level percentage
+ns=2;s=SDPLC.tank.motor_running,tank.motor_running,Boolean,true,TRUE,Agitator/motor command
+ns=2;s=SDPLC.tank.tailings_flow,tank.tailings_flow,Double,true,38.000000,Tailings flow percentage

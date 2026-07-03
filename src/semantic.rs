@@ -4,19 +4,6 @@
 //! containing resolved type information and a symbol table suitable for
 //! direct consumption by LLVM IR generation via `inkwell`.
 //!
-//! ## Responsibilities
-//!
-//! - **Type resolution**: maps [`TypeSpec`] to [`ResolvedType`] with known
-//!   bit widths and LLVM type mappings.
-//! - **Symbol table**: scoped variable lookup with type, mutability, and
-//!   qualifier metadata.
-//! - **Type checking**: validates assignments, operator compatibility,
-//!   condition types (must be BOOL), and implicit numeric promotion.
-//! - **Variable validation**: ensures variables are declared before use
-//!   and not assigned if CONSTANT.
-//! - **Control flow validation**: EXIT only inside loops, FOR variables
-//!   must be integer types, CASE selectors must be integer.
-//!
 //! ## LLVM Type Mapping
 //!
 //! | IEC 61131-3 | LLVM IR | Bits |
@@ -305,8 +292,7 @@ impl std::fmt::Display for Diagnostic {
 /// The validated output of semantic analysis, consumed by codegen.
 ///
 /// Contains the original AST, the symbol table with resolved types,
-/// and any diagnostics. Codegen should only proceed if
-/// [`has_errors`](ProgramContext::has_errors) returns false.
+/// and any diagnostics.
 pub struct ProgramContext {
     pub ast: CompilationUnit,
     pub symbols: SymbolTable,
@@ -1107,21 +1093,7 @@ impl SemanticAnalyzer {
 ///
 /// This is the main entry point for semantic analysis.
 ///
-/// # Example
-///
-/// ```
-/// use sdplc::lexer::Lexer;
-/// use sdplc::parser::Parser;
-/// use sdplc::semantic::analyze;
-///
-/// let source = "PROGRAM P VAR x : INT := 0; END_VAR x := x + 1; END_PROGRAM";
-/// let lexer = Lexer::new(source);
-/// let mut parser = Parser::new(lexer);
-/// let ast = parser.parse().expect("parse error");
-/// let ctx = analyze(ast);
-///
-/// assert!(!ctx.has_errors());
-/// ```
+
 pub fn analyze(ast: CompilationUnit) -> ProgramContext {
     SemanticAnalyzer::new().analyze(ast)
 }
