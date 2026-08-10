@@ -1,0 +1,2 @@
+cycles,target_ms,avg_exec_us,max_exec_us,avg_jitter_us,max_jitter_us,uptime_s
+1000,50.000,1.789,217.700,588.497,19997.300,50.593
