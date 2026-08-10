@@ -1,0 +1,10 @@
+/target
+output.bc
+output.ll
+control_flow.bc
+control_flow.ll
+demo.bc
+demo.ll
+/benchmark/program
+*docx
+thesis_figures
