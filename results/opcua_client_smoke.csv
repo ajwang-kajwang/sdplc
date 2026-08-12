@@ -1,0 +1,14 @@
+operation,node_id,status,value
+browse,ObjectsFolder,Good,4 references
+read,ns=2;s=SDPLC.tank.level,Good,50.781000
+read,ns=2;s=SDPLC.tank.air_flow,Good,30.000000
+read,ns=2;s=SDPLC.tank.feed_flow,Good,40.000000
+read,ns=2;s=SDPLC.tank.tailings_flow,Good,38.000000
+read,ns=2;s=SDPLC.tank.concentrate_grade,Good,82.065620
+read,ns=2;s=SDPLC.tank.emergency_stop,Good,false
+read,ns=2;s=SDPLC.tank.motor_running,Good,true
+read,ns=2;s=SDPLC.runtime.cycle,Good,781
+read,ns=2;s=SDPLC.runtime.avg_exec_us,Good,14.020245
+read,ns=2;s=SDPLC.runtime.max_jitter_us,Good,0.000000
+write,ns=2;s=SDPLC.tank.air_flow,Good,45.500000
+read_back,ns=2;s=SDPLC.tank.air_flow,Good,45.500000

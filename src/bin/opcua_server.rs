@@ -512,7 +512,7 @@ fn write_evidence(
              Browse root: `Objects/SDPLC`.\n\n\
              Minimum nodes are exposed under `SDPLC/tank` and `SDPLC/runtime`.\n\n\
              Writable validation node: `{writable}`. Write through an OPC UA client and read the same node back; server write callbacks update the shared `ProcessImage`.\n\n\
-             Run `cargo run --bin opcua_server -- examples/flotation_tank.st --scan-time=10 --self-test` to create `results/opcua_client_smoke.csv` with wire-level browse/read/write evidence.\n"
+             Run `cargo run --bin opcua_server -- programs/flotation_tank.st --scan-time=10 --self-test` to create `results/opcua_client_smoke.csv` with wire-level browse/read/write evidence.\n"
         ),
     )?;
 
@@ -611,7 +611,7 @@ fn parse_args() -> Config {
             print_help_and_exit();
         } else if !arg.starts_with('-') {
             // Reserved for the Sunday demo shape:
-            // opcua_server examples/flotation_tank.st --scan-time=10
+            // opcua_server programs/flotation_tank.st --scan-time=10
         } else {
             eprintln!("unknown argument: {arg}");
             print_help_and_exit();
@@ -624,7 +624,7 @@ fn parse_args() -> Config {
 fn print_help_and_exit() -> ! {
     println!("SD-PLC OPC UA server\n");
     println!("USAGE:");
-    println!("  cargo run --bin opcua_server -- examples/flotation_tank.st --scan-time=10");
+    println!("  cargo run --bin opcua_server -- programs/flotation_tank.st --scan-time=10");
     println!();
     println!("OPTIONS:");
     println!("  --host=ADDR       Bind host, default 127.0.0.1");

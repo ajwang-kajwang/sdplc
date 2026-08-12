@@ -1,0 +1,9 @@
+benchmark,source,phase,status,elapsed_us,items
+compiler flotation,programs/flotation_tank.st,lex,pass,73.858,211
+compiler flotation,programs/flotation_tank.st,parse,pass,126.806,1
+compiler flotation,programs/flotation_tank.st,semantic,pass,34.331,0
+compiler flotation,programs/flotation_tank.st,codegen,pass,243.758,6945
+compiler control_flow,programs/control_flow.st,lex,pass,113.047,279
+compiler control_flow,programs/control_flow.st,parse,pass,161.320,2
+compiler control_flow,programs/control_flow.st,semantic,pass,39.514,0
+compiler control_flow,programs/control_flow.st,codegen,pass,229.831,10028

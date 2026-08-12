@@ -59,10 +59,10 @@ def load_data(csv_path: pathlib.Path) -> pd.DataFrame:
     else:
         print(f"[INFO] CSV not found at {csv_path}; using recorded thesis values.")
         rows = [
-            ("compiler flotation", "examples/flotation_tank.st", "lex", "pass", 184.8, 211),
-            ("compiler flotation", "examples/flotation_tank.st", "parse", "pass", 248.8, 1),
-            ("compiler flotation", "examples/flotation_tank.st", "semantic", "pass", 89.7, 0),
-            ("compiler flotation", "examples/flotation_tank.st", "codegen", "pass", 326.4, 6945),
+            ("compiler flotation", "programs/flotation_tank.st", "lex", "pass", 184.8, 211),
+            ("compiler flotation", "programs/flotation_tank.st", "parse", "pass", 248.8, 1),
+            ("compiler flotation", "programs/flotation_tank.st", "semantic", "pass", 89.7, 0),
+            ("compiler flotation", "programs/flotation_tank.st", "codegen", "pass", 326.4, 6945),
             ("compiler control_flow", "programs/control_flow.st", "lex", "pass", 187.6, 279),
             ("compiler control_flow", "programs/control_flow.st", "parse", "pass", 290.1, 2),
             ("compiler control_flow", "programs/control_flow.st", "semantic", "pass", 53.6, 0),

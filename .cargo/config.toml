@@ -1,2 +1,2 @@
 [env]
-LLVM_SYS_170_PREFIX = "C:\\Users\\kajwa\\Development\\llvm-install"
+LLVM_SYS_170_PREFIX = "/usr/lib/llvm-17"

@@ -111,10 +111,9 @@ sdplc/
 |   |-- codesys_flotation_20ms_raw.csv
 |   |-- codesys_flotation_50ms.csv
 |   |-- codesys_flotation_50ms_raw.csv
-|-- examples/
-|   `-- flotation_tank.st
 |-- programs/
-|   `-- control_flow.st
+|   |-- control_flow.st
+|   `-- flotation_tank.st
 |-- results/
 |   |-- README.md
 |   |-- compiler_benchmark/

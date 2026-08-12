@@ -17,14 +17,9 @@ sdplc/
 │   ├── developer_guide.md        ← This file
 │   └── multi_language_design.md  ← Future: LD/FBD/SFC via PLCopen XML
 │
-├── examples/                   ← Reference .st programs shipped with the repo
-│   ├── hello.st                   Minimal program (start here)
-│   ├── pid_controller.st         PID function block + temperature control
-│   ├── multi_pou.st              Functions, FBs, and programs together
-│   ├── all_control_flow.st       Every ST control flow construct
-│   └── flotation_column.st       Thesis validation target (200+ lines)
-│
-├── programs/                   ← YOUR working .st files (not tracked)
+├── programs/                   ← Reference .st programs shipped with the repo
+│   ├── control_flow.st            ST control flow constructs
+│   └── flotation_tank.st          Thesis validation target
 │
 ├── src/
 │   ├── main.rs      [259 lines]  CLI driver — reads .st, runs 4 stages

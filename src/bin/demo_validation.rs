@@ -73,7 +73,7 @@ fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     let mut compiler_metrics = Vec::new();
     compiler_metrics.extend(measure_compiler_pipeline(
         "compiler flotation",
-        "examples/flotation_tank.st",
+        "programs/flotation_tank.st",
     )?);
     compiler_metrics.extend(measure_compiler_pipeline(
         "compiler control_flow",
@@ -83,7 +83,7 @@ fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 
     let compiler_flotation = compiler_benchmark_command(
         "compiler flotation",
-        "examples/flotation_tank.st",
+        "programs/flotation_tank.st",
         &config.output_dir,
     )?;
     let compiler_control_flow = compiler_benchmark_command(
@@ -97,7 +97,7 @@ fn run(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     for scan_ms in [10_u64, 20, 50] {
         results.push(run_runtime_benchmark(
             &format!("flotation runtime {scan_ms}ms"),
-            "examples/flotation_tank.st",
+            "programs/flotation_tank.st",
             cycles,
             scan_ms,
             &config.output_dir,
@@ -339,7 +339,7 @@ fn run_opcua_benchmark(
             "--bin",
             "opcua_server",
             "--",
-            "examples/flotation_tank.st",
+            "programs/flotation_tank.st",
             "--scan-time=10",
             "--self-test",
             &format!("--read-count={read_count}"),
