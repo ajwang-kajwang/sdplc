@@ -19,27 +19,36 @@ sdplc/
 │
 ├── programs/                   ← Reference .st programs shipped with the repo
 │   ├── control_flow.st            ST control flow constructs
+│   ├── fb_library_demo.st         Every standard function block, exercised
 │   └── flotation_tank.st          Thesis validation target
 │
 ├── src/
-│   ├── main.rs      [259 lines]  CLI driver — reads .st, runs 4 stages
+│   ├── main.rs      [ 315 lines] CLI driver — reads .st, runs 4 stages
 │   ├── bin/
-│   │   └── runtime.rs [373 lines] JIT scan cycle executor + dashboard
-│   ├── lib.rs       [ 51 lines]  Crate root — pub mod declarations
-│   ├── lexer.rs     [1163 lines] Stage 1: source text → tokens
-│   ├── parser.rs    [1347 lines] Stage 2: tokens → AST
+│   │   └── runtime.rs [480 lines] JIT scan cycle executor + dashboard
+│   ├── lib.rs       [  24 lines] Crate root — pub mod declarations
+│   ├── lexer.rs     [1313 lines] Stage 1: source text → tokens
+│   ├── parser.rs    [1433 lines] Stage 2: tokens → AST
 │   ├── ast.rs       [ 383 lines] Shared data model (AST node types)
-│   ├── semantic.rs  [1363 lines] Stage 3: AST → validated + typed AST
-│   └── codegen.rs   [1627 lines] Stage 4: AST → LLVM IR (+ runtime compilation)
+│   ├── semantic.rs  [1637 lines] Stage 3: AST → validated + typed AST
+│   ├── codegen.rs   [2541 lines] Stage 4: AST → LLVM IR (+ runtime compilation)
+│   ├── stdlib.rs    [ 323 lines] Standard FB library: injection + TIME literals
+│   └── stdlib/
+│       └── standard_fb.st [296]  TON/TOF/TP, CTU/CTD/CTUD, R_TRIG/F_TRIG, RS/SR
 │
 └── tests/
-    ├── lexer_integration_test.rs      [10 tests]
-    ├── parser_integration_test.rs     [ 8 tests]
-    ├── semantic_integration_test.rs   [18 tests]
-    └── codegen_integration_test.rs    [11 tests]
+    ├── lexer_integration.rs        [10 tests]
+    ├── parser_integration.rs       [ 8 tests]
+    ├── sementic_integration.rs     [26 tests]
+    ├── codegen_integration_test.rs [11 tests]
+    └── function_block_test.rs      [14 tests]  JIT-executed FB behaviour
 ```
- 
-Total: **7,712 lines of Rust**, **137 tests**, **460 lines of example ST**, **2 binaries**.
+
+Total: **12,300 lines of Rust**, **171 tests**, **5 binaries**.
+
+Note that `src/stdlib/standard_fb.st` is *Structured Text, not Rust* — the
+standard function blocks are compiled by SD-PLC's own pipeline rather than
+hand-written in LLVM IR. See §13.
  
 ---
  
@@ -107,13 +116,22 @@ When you type `sdplc programs/my_program.st`, data transforms through four stage
  │  Variables stored as LLVM module-level globals (persist)       │
  │  __init_P() called once → stores initial values               │
  │  loop at fixed interval:                                       │
- │    1. call __scan_P()  → executes one scan cycle              │
- │    2. call __get_*()   → read each variable as f64            │
- │    3. update terminal dashboard                                │
- │    4. measure execution time + jitter                          │
- │    5. sleep until next cycle                                   │
+ │    1. call __sdplc_set_time_ms(t) → publish the scan clock    │
+ │    2. call __scan_P()  → executes one scan cycle              │
+ │    3. call __get_*()   → read each variable as f64            │
+ │    4. update terminal dashboard                                │
+ │    5. measure execution time + jitter                          │
+ │    6. sleep until next cycle                                   │
  └─────────────────────────────────────────────────────────────────┘
 ```
+
+One step happens before all of this and is easy to miss: both
+`compile()` and `compile_for_runtime()` begin by calling
+`stdlib::inject()`, which prepends the standard function blocks the
+program instantiates. `semantic::analyze()` does the same for its symbol
+table. A program declaring `delay : TON;` is therefore compiled as if
+`FUNCTION_BLOCK TON ... END_FUNCTION_BLOCK` had been pasted above it.
+Nothing downstream of the AST knows the difference. See §13.
  
 ---
  
@@ -697,9 +715,10 @@ These test the full pipeline from source string to output.
 |File|Count|Tests|
 |---|---|---|
 |`lexer_integration_test.rs`|10|Full programs lex without unknowns|
-|`parser_integration_test.rs`|8|Full programs parse to correct AST structure|
-|`semantic_integration_test.rs`|18|Type errors caught, valid programs pass clean|
+|`parser_integration.rs`|8|Full programs parse to correct AST structure|
+|`sementic_integration.rs`|26|Type errors caught, valid programs pass clean|
 |`codegen_integration_test.rs`|11|LLVM IR contains expected instructions|
+|`function_block_test.rs`|14|Function blocks JIT-executed scan by scan (§13.6)|
  
 Run integration tests only: `cargo test --test codegen_integration_test`
  
@@ -732,6 +751,23 @@ Run everything: `cargo test`
  
 Edit `main.rs` lines 65–87 only. The rest of the compiler works on `&str`.
  
+### "I want to add a function block to the standard library"
+
+1. Write it in Structured Text at the bottom of `src/stdlib/standard_fb.st`
+2. Add a behavioural test to `tests/function_block_test.rs`
+
+That is the whole procedure. There is no step involving `codegen.rs`,
+`semantic.rs` or a registration table — injection discovers the block by
+name, and the generic function block machinery in §13 compiles it. If you
+find yourself editing Rust to add a block, something has gone wrong.
+
+### "I want a function block to read the clock"
+
+Call `TIME_MS()` in its body. It returns `TIME` (milliseconds) and lowers
+to a load of the `@__sdplc_now_ms` global, which the host advances once
+per scan. It is the one intrinsic the library has that user programs
+cannot express themselves — see §13.4.
+
 ### "I want to add PLCopen XML input"
  
 1. Create `src/plcopen.rs` — parse XML, produce `CompilationUnit`
@@ -766,3 +802,195 @@ writeln!(csv_file, "{},{}", cycle, values.iter()
 ```
  
 This gives you publication-quality data for plotting in Python and comparing against CODESYS traces.
+
+---
+
+## 13. Function Blocks and the Standard Library
+
+A `FUNCTION` is stateless: call it twice with the same arguments and you
+get the same answer. A `FUNCTION_BLOCK` is not — a `TON` that has been
+counting for 400ms behaves differently on its next call than one that has
+just started. That difference is the whole problem this section solves,
+because a scan cycle calls the same block thousands of times and expects
+it to remember where it was.
+
+### 13.1 One struct per instance
+
+Each `FUNCTION_BLOCK` gets an LLVM struct type holding **every**
+declaration in it — inputs, outputs and internal `VAR` state alike, in
+declaration order:
+
+```st
+FUNCTION_BLOCK TON
+VAR_INPUT  IN : BOOL; PT : TIME;      END_VAR
+VAR_OUTPUT Q  : BOOL; ET : TIME;      END_VAR
+VAR        start_time : TIME; running : BOOL; END_VAR
+```
+
+becomes
+
+```llvm
+%FB.TON = type { i1, i64, i1, i64, i64, i1 }
+;                IN   PT   Q   ET   start_time  running
+```
+
+The block itself compiles to a function taking a pointer to one of those
+structs:
+
+```llvm
+define void @TON(ptr %self)
+define void @__fbinit_TON(ptr %self)   ; zero the fields, apply defaults
+```
+
+Declaring `warmup : TON;` allocates one `%FB.TON` — as a stack `alloca`
+under `compile()`, or as a module-level global under
+`compile_for_runtime()` so it survives between scans. Declaring two
+instances allocates two structs, which is why `fast` and `slow` in
+`tests/function_block_test.rs` time independently.
+
+The block body never allocates anything. `emit_pou()` binds each field
+name to a `getelementptr` into `%self`, so `start_time := TIME_MS();`
+inside the body writes the caller's instance memory directly. That single
+decision is what makes state persist.
+
+One caveat worth knowing before you read too much into an AOT `.ll` dump:
+under `compile()` a PROGRAM's variables are `alloca`s, and its function
+block instances are too, so they are reinitialised on every call to
+`@ProgramName()`. That is a property of the AOT path in general, not of
+function blocks — plain `VAR` variables behave the same way there. State
+persists across scans in the runtime path (`compile_for_runtime()`),
+where everything becomes a module global. `tests/function_block_test.rs`
+therefore tests through the runtime path, and so should you.
+
+### 13.2 Calling a block
+
+`emit_call()` checks whether the callee names a *variable* holding an
+instance before it looks for a function of that name, because
+`warmup(IN := motor)` is a call on a variable. The call expands into three
+steps, in the order IEC 61131-3 requires:
+
+```st
+warmup(IN := motor, PT := T#2s, Q => conveyor_ready);
+```
+
+```llvm
+; 1. copy bound inputs into the instance
+%warmup.IN = getelementptr %FB.TON, ptr @__var_Demo_warmup, i32 0, i32 0
+store i1 %motor, ptr %warmup.IN
+%warmup.PT = getelementptr %FB.TON, ptr @__var_Demo_warmup, i32 0, i32 1
+store i64 2000, ptr %warmup.PT
+; 2. run the body against that instance
+call void @TON(ptr @__var_Demo_warmup)
+; 3. copy '=>' outputs back out
+%warmup.Q = getelementptr %FB.TON, ptr @__var_Demo_warmup, i32 0, i32 2
+%Q = load i1, ptr %warmup.Q
+store i1 %Q, ptr @__var_Demo_conveyor_ready
+```
+
+Inputs bind positionally (`warmup(motor, T#2s)`) or by name
+(`IN := motor`). Outputs bind with `=>`, or — more commonly — are read
+afterwards as `warmup.Q`, which is just a `getelementptr` plus `load` and
+needs no copy-back at all.
+
+Semantic analysis validates all of this in `check_fb_invocation()`:
+unknown parameter names, `:=` on an output, `=>` on an input and type
+mismatches are errors, not warnings.
+
+### 13.3 The library is written in ST
+
+`src/stdlib/standard_fb.st` holds all ten standard blocks as ordinary
+Structured Text. Nothing in `codegen.rs` mentions `TON` or any other
+block by name; they compile through the same path a user's own
+`FUNCTION_BLOCK` does. Adding one means editing that `.st` file.
+
+| Block | Purpose | Outputs |
+|---|---|---|
+| `TON` | On-delay: Q after IN has been high for PT | `Q`, `ET` |
+| `TOF` | Off-delay: Q held for PT after IN falls | `Q`, `ET` |
+| `TP` | Pulse: one fixed PT pulse per rising edge | `Q`, `ET` |
+| `CTU` | Up counter, reset by `R` | `Q`, `CV` |
+| `CTD` | Down counter, loaded by `LD` | `Q`, `CV` |
+| `CTUD` | Up/down counter | `QU`, `QD`, `CV` |
+| `R_TRIG` | Rising edge, one scan | `Q` |
+| `F_TRIG` | Falling edge, one scan | `Q` |
+| `RS` | Reset-dominant latch | `Q1` |
+| `SR` | Set-dominant latch | `Q1` |
+
+Where the standard leaves room, SD-PLC commits:
+
+- **`RS` is reset-dominant, `SR` is set-dominant.** With both inputs
+  high, `RS` clears and `SR` sets.
+- **`F_TRIG`'s internal `M` initialises `TRUE`**, so a program that starts
+  with `CLK = FALSE` does not see a phantom falling edge on scan 1. This
+  is asserted by `f_trig_is_quiet_on_the_first_scan`.
+- **Counters saturate** at the `INT` bounds rather than wrapping.
+- **`ET` saturates at `PT`** and resets to zero when the timer resets.
+
+`stdlib::inject()` prepends only the blocks a program actually declares,
+found by scanning declared types and closing over the library's own
+dependencies. A program with no timers emits no timer IR. A user who
+defines their own `FUNCTION_BLOCK TON` shadows the bundled one.
+
+### 13.4 TIME and the scan clock
+
+`TIME` is a signed 64-bit count of **milliseconds** — not nanoseconds,
+despite what an older comment in `semantic.rs` claimed. `T#1h30m`,
+`T#2m10s500ms`, `T#1_500ms` and `T#-2s` all parse, via
+`stdlib::parse_time_literal()`, to a plain `i64` constant in the IR.
+
+Timers need to know the current time, which no ST expression can produce.
+The one intrinsic in the language fills that gap:
+
+```
+TIME_MS()  →  load i64, ptr @__sdplc_now_ms
+```
+
+The global and its setter are emitted **lazily**, on first use, so a
+program without timers carries neither symbol:
+
+```llvm
+@__sdplc_now_ms = global i64 0
+define void @__sdplc_set_time_ms(i64 %0)
+```
+
+The host advances it. `runtime.rs` samples `Instant::now()` once per
+cycle and publishes it *before* calling `__scan_P()`, so every timer in
+the program observes the same instant — the same discipline a hardware
+PLC applies to its process image. Timers therefore advance in whole scan
+cycles, which is what makes a run reproducible.
+
+Looking up `__sdplc_set_time_ms` is allowed to fail: for a program with
+no timers it genuinely does not exist, and `runtime.rs` treats a missing
+symbol as "no clock needed" rather than an error. Anything embedding the
+compiled `.ll`/`.bc` in a C or Rust host must call the setter itself; a
+host that never does gets timers frozen at zero.
+
+### 13.5 Watching function block state
+
+`compile_program_for_runtime()` exposes each instance's scalar **outputs**
+as runtime variables named `instance.field`:
+
+```
+ warmup.Q                 BOOL                    TRUE
+ warmup.ET                LINT                    2000
+ parts.CV                 INT                       19
+```
+
+They appear in the terminal dashboard, in `runtime_final_values.csv` and
+in the OPC UA address space with no extra work. They are read-only —
+`setter_fn_name` is `None`, because the scan cycle owns them and a write
+from outside would be overwritten on the next scan anyway. Inputs and
+internal state are deliberately not exposed: inputs are rewritten every
+scan by the call site, and internal fields are implementation detail.
+
+### 13.6 Testing
+
+`tests/function_block_test.rs` does not inspect IR text. It builds a JIT
+engine, drives the scan clock explicitly and asserts what the plant would
+see — that a `TON` with a 500ms preset is still off at 400ms, that a
+`CTU` counts an edge rather than a level, that a `TP` pulse cannot be
+retriggered. Driving the clock by hand rather than reading the wall clock
+is what makes those assertions exact rather than flaky.
+
+When adding a block, test it the same way. IR-shape assertions belong in
+`codegen_integration_test.rs` and prove far less.

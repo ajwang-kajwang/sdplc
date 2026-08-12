@@ -327,3 +327,125 @@ fn test_duplicate_declaration() {
             .any(|d| d.message.contains("already declared"))
     );
 }
+
+// ─── Standard Function Blocks ───────────────────────────────────
+
+#[test]
+fn test_standard_function_block_instance_passes() {
+    let ctx = assert_clean(
+        r#"
+PROGRAM P
+VAR
+    start : BOOL;
+    delay : TON;
+    ready : BOOL;
+    elapsed : TIME;
+END_VAR
+delay(IN := start, PT := T#5s);
+ready := delay.Q;
+elapsed := delay.ET;
+END_PROGRAM
+"#,
+    );
+    // The library is registered, so nothing should be guessed at.
+    assert!(
+        !ctx.diagnostics
+            .iter()
+            .any(|d| d.message.contains("unknown function/FB")),
+        "standard function blocks should be known, not assumed"
+    );
+}
+
+#[test]
+fn test_function_block_output_binding_passes() {
+    assert_clean(
+        r#"
+PROGRAM P
+VAR
+    pulse : BOOL;
+    counter : CTU;
+    total : INT;
+    reached : BOOL;
+END_VAR
+counter(CU := pulse, R := FALSE, PV := 10, CV => total, Q => reached);
+END_PROGRAM
+"#,
+    );
+}
+
+#[test]
+fn test_unknown_function_block_input_is_an_error() {
+    let ctx = assert_errors(
+        "PROGRAM P VAR start : BOOL; delay : TON; END_VAR delay(EN := start); END_PROGRAM",
+    );
+    assert!(
+        ctx.diagnostics
+            .iter()
+            .any(|d| d.message.contains("has no input named 'EN'"))
+    );
+}
+
+#[test]
+fn test_binding_an_output_with_assign_is_an_error() {
+    let ctx = assert_errors(
+        "PROGRAM P VAR delay : TON; END_VAR delay(Q := TRUE); END_PROGRAM",
+    );
+    assert!(
+        ctx.diagnostics
+            .iter()
+            .any(|d| d.message.contains("is an output of TON"))
+    );
+}
+
+#[test]
+fn test_unknown_function_block_member_is_an_error() {
+    let ctx = assert_errors(
+        "PROGRAM P VAR delay : TON; done : BOOL; END_VAR done := delay.RUNNING; END_PROGRAM",
+    );
+    assert!(
+        ctx.diagnostics
+            .iter()
+            .any(|d| d.message.contains("has no member"))
+    );
+}
+
+#[test]
+fn test_instance_of_unknown_type_is_an_error() {
+    let ctx = assert_errors(
+        "PROGRAM P VAR thing : NoSuchBlock; END_VAR thing(IN := TRUE); END_PROGRAM",
+    );
+    assert!(
+        ctx.diagnostics
+            .iter()
+            .any(|d| d.message.contains("not a known function block"))
+    );
+}
+
+#[test]
+fn test_duration_arithmetic_passes() {
+    assert_clean(
+        r#"
+PROGRAM P
+VAR
+    budget : TIME := T#1s;
+    used : TIME;
+    over : BOOL;
+END_VAR
+used := budget - T#250ms;
+over := used > budget;
+END_PROGRAM
+"#,
+    );
+}
+
+#[test]
+fn test_time_ms_intrinsic_takes_no_arguments() {
+    let ctx = assert_errors(
+        "PROGRAM P VAR now : TIME; END_VAR now := TIME_MS(1); END_PROGRAM",
+    );
+    assert!(
+        ctx.diagnostics
+            .iter()
+            .any(|d| d.message.contains("takes no arguments"))
+    );
+}

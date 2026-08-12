@@ -21,16 +21,29 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use inkwell::AddressSpace;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
+use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, FloatValue, FunctionValue, IntValue, PointerValue};
 use inkwell::{FloatPredicate, IntPredicate};
 
 use crate::ast::*;
 use crate::semantic::ResolvedType;
+use crate::stdlib;
+
+// ─── Runtime support symbols ────────────────────────────────────
+
+/// Module global holding the runtime's monotonic scan clock, in
+/// milliseconds. Emitted on demand — only programs that use timers or
+/// call `TIME_MS()` carry it.
+pub const TIME_GLOBAL: &str = "__sdplc_now_ms";
+
+/// Symbol the host calls once per scan cycle to advance [`TIME_GLOBAL`]
+/// before executing the scan body: `void(i64 millis)`.
+pub const TIME_SETTER_FN: &str = "__sdplc_set_time_ms";
 
 // ─── Codegen Error ──────────────────────────────────────────────
 
@@ -59,6 +72,54 @@ struct VarSlot<'ctx> {
     resolved_type: ResolvedType,
     /// The LLVM type for loads.
     llvm_type: BasicTypeEnum<'ctx>,
+}
+
+// ─── Function Block Instance Layout ─────────────────────────────
+
+/// One field of a function block's instance struct.
+///
+/// Every declaration in the block — inputs, outputs and internal `VAR`
+/// state alike — becomes a field, in declaration order. That is what
+/// makes state survive between scan cycles: the fields live in the
+/// caller's instance memory, not in the block function's stack frame.
+#[derive(Debug, Clone)]
+struct FbField {
+    name: String,
+    /// Index of this field within the instance struct.
+    index: u32,
+    resolved_type: ResolvedType,
+    /// VAR_INPUT / VAR_OUTPUT / VAR — decides how a call site may bind it.
+    qualifier: VarQualifier,
+    initial_value: Option<Expression>,
+}
+
+/// The instance-struct layout of one `FUNCTION_BLOCK`.
+#[derive(Debug, Clone)]
+struct FbLayout<'ctx> {
+    struct_type: StructType<'ctx>,
+    fields: Vec<FbField>,
+}
+
+impl<'ctx> FbLayout<'ctx> {
+    /// Looks up a field by name, case-insensitively (ST is not
+    /// case-sensitive in parameter names).
+    fn field(&self, name: &str) -> Option<&FbField> {
+        self.fields
+            .iter()
+            .find(|f| f.name.eq_ignore_ascii_case(name))
+    }
+
+    fn inputs(&self) -> impl Iterator<Item = &FbField> {
+        self.fields
+            .iter()
+            .filter(|f| matches!(f.qualifier, VarQualifier::VarInput | VarQualifier::VarInOut))
+    }
+
+    fn outputs(&self) -> impl Iterator<Item = &FbField> {
+        self.fields
+            .iter()
+            .filter(|f| matches!(f.qualifier, VarQualifier::VarOutput | VarQualifier::VarInOut))
+    }
 }
 
 // ─── Runtime Variable Metadata ──────────────────────────────────
@@ -101,8 +162,26 @@ pub struct CodeGenerator<'ctx> {
     /// Declared LLVM functions for inter-POU calls.
     functions: HashMap<String, FunctionValue<'ctx>>,
 
+    /// Instance-struct layout per FUNCTION_BLOCK name.
+    fb_layouts: HashMap<String, FbLayout<'ctx>>,
+    /// Per-FUNCTION_BLOCK instance initialiser, `void(ptr self)`. Kept
+    /// out of `functions` so ST code cannot call it by name.
+    fb_initializers: HashMap<String, FunctionValue<'ctx>>,
+
     /// Stack of loop-exit basic blocks (for EXIT statements).
     loop_exit_stack: Vec<BasicBlock<'ctx>>,
+}
+
+/// Where a runtime-exposed value lives, so the generated getter and
+/// setter can reach it: either a global directly, or a field inside a
+/// function block instance global.
+#[derive(Clone)]
+struct RuntimeTarget<'ctx> {
+    base: PointerValue<'ctx>,
+    /// `Some((instance struct, field index))` for FB instance members.
+    member: Option<(StructType<'ctx>, u32)>,
+    resolved_type: ResolvedType,
+    llvm_type: BasicTypeEnum<'ctx>,
 }
 
 impl<'ctx> CodeGenerator<'ctx> {
@@ -118,6 +197,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             current_fn: None,
             variables: HashMap::new(),
             functions: HashMap::new(),
+            fb_layouts: HashMap::new(),
+            fb_initializers: HashMap::new(),
             loop_exit_stack: Vec::new(),
         }
     }
@@ -228,10 +309,13 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let total_size: u32 = ranges.iter().map(|r| (r.high - r.low + 1) as u32).product();
                 elem_ty.array_type(total_size).into()
             }
-            ResolvedType::UserDefined { .. } => {
-                // Placeholder — FB instances would be struct pointers
-                self.context.i64_type().into()
-            }
+            ResolvedType::UserDefined { name } => match self.fb_layouts.get(name) {
+                // A function block instance is its layout struct, held
+                // inline by the declaring POU.
+                Some(layout) => layout.struct_type.into(),
+                // Unknown user type — no layout to lay down.
+                None => self.context.i64_type().into(),
+            },
             ResolvedType::Error => self.context.i32_type().into(),
         }
     }
@@ -243,6 +327,13 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// Pass 1: declare all function signatures.
     /// Pass 2: emit bodies.
     pub fn compile(&mut self, unit: &CompilationUnit) -> CgResult<()> {
+        // Standard function blocks the program instantiates are compiled
+        // alongside it — see `stdlib::inject`.
+        let unit = stdlib::inject(unit);
+
+        // Pass 0: name every FB instance struct before any is laid out,
+        // so blocks may hold instances of each other.
+        self.predeclare_fb_types(&unit);
         // Pass 1: declare function signatures
         for pou in &unit.units {
             self.declare_pou(pou)?;
@@ -252,6 +343,72 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.emit_pou(pou)?;
         }
         Ok(())
+    }
+
+    /// Creates an empty (opaque) LLVM struct type for every
+    /// `FUNCTION_BLOCK` in the unit.
+    ///
+    /// Bodies are filled in later, by [`declare_pou`](Self::declare_pou).
+    /// Splitting the two lets a block declare an instance of a block
+    /// defined further down the file.
+    fn predeclare_fb_types(&mut self, unit: &CompilationUnit) {
+        for pou in &unit.units {
+            if let Pou::FunctionBlock(fb) = pou {
+                if self.fb_layouts.contains_key(&fb.name) {
+                    continue;
+                }
+                let struct_type = self.context.opaque_struct_type(&format!("FB.{}", fb.name));
+                self.fb_layouts.insert(
+                    fb.name.clone(),
+                    FbLayout {
+                        struct_type,
+                        fields: Vec::new(),
+                    },
+                );
+            }
+        }
+    }
+
+    /// Fills in the instance struct body for one `FUNCTION_BLOCK` and
+    /// records the field table used by call sites and member access.
+    fn layout_function_block(&mut self, fb: &FunctionBlockDecl) {
+        let mut fields: Vec<FbField> = Vec::new();
+        let mut field_types: Vec<BasicTypeEnum<'ctx>> = Vec::new();
+
+        for block in &fb.var_blocks {
+            for decl in &block.declarations {
+                let resolved_type = Self::resolve_type(&decl.type_spec);
+                field_types.push(self.llvm_type(&resolved_type));
+                fields.push(FbField {
+                    name: decl.name.clone(),
+                    index: fields.len() as u32,
+                    resolved_type,
+                    qualifier: block.qualifier.clone(),
+                    initial_value: decl.initial_value.clone(),
+                });
+            }
+        }
+
+        let struct_type = self.fb_layouts[&fb.name].struct_type;
+        struct_type.set_body(&field_types, false);
+        self.fb_layouts.insert(
+            fb.name.clone(),
+            FbLayout {
+                struct_type,
+                fields,
+            },
+        );
+    }
+
+    /// The symbol of a function block's instance initialiser.
+    fn fb_init_name(fb_name: &str) -> String {
+        format!("__fbinit_{}", fb_name)
+    }
+
+    /// A pointer type. Pointers are opaque under LLVM 15+, so the
+    /// pointee is irrelevant — `i8*` is just the conventional spelling.
+    fn ptr_type(&self) -> inkwell::types::PointerType<'ctx> {
+        self.context.i8_type().ptr_type(AddressSpace::default())
     }
 
     /// Declares the LLVM function signature for a POU (no body yet).
@@ -296,13 +453,122 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.functions.insert(f.name.clone(), function);
             }
             Pou::FunctionBlock(fb) => {
-                // FB is a void function (state is in variables)
-                let fn_type = self.context.void_type().fn_type(&[], false);
+                // A function block is `void @Name(ptr %self)` — all of
+                // its state lives in the caller's instance struct, which
+                // is what makes it persist across scan cycles.
+                self.layout_function_block(fb);
+
+                let fn_type = self
+                    .context
+                    .void_type()
+                    .fn_type(&[self.ptr_type().into()], false);
+
                 let function = self.module.add_function(&fb.name, fn_type, None);
+                if let Some(param) = function.get_first_param() {
+                    param.set_name("self");
+                }
                 self.functions.insert(fb.name.clone(), function);
+
+                let init_fn =
+                    self.module
+                        .add_function(&Self::fb_init_name(&fb.name), fn_type, None);
+                if let Some(param) = init_fn.get_first_param() {
+                    param.set_name("self");
+                }
+                self.fb_initializers.insert(fb.name.clone(), init_fn);
             }
         }
         Ok(())
+    }
+
+    /// Binds every field of a function block instance as a variable slot
+    /// pointing into `self_ptr`, so the block's body reads and writes
+    /// instance memory rather than a stack frame.
+    ///
+    /// The builder must already be positioned in the block where the
+    /// field pointers should be computed.
+    fn bind_fb_fields(
+        &mut self,
+        layout: &FbLayout<'ctx>,
+        self_ptr: PointerValue<'ctx>,
+    ) -> CgResult<()> {
+        for field in &layout.fields {
+            let ptr = self
+                .builder
+                .build_struct_gep(layout.struct_type, self_ptr, field.index, &field.name)
+                .map_err(|e| CodegenError {
+                    message: format!("cannot address field '{}': {}", field.name, e),
+                })?;
+            let llvm_type = self.llvm_type(&field.resolved_type);
+            self.variables.insert(
+                field.name.clone(),
+                VarSlot {
+                    ptr,
+                    resolved_type: field.resolved_type.clone(),
+                    llvm_type,
+                },
+            );
+        }
+        Ok(())
+    }
+
+    /// Emits `void @__fbinit_<Name>(ptr %self)` — zeroes every field of
+    /// an instance, then applies any declared initial values.
+    ///
+    /// Callers invoke this once per instance: at the declaration site
+    /// for stack instances, and from `__init_<Program>` for the runtime's
+    /// module-global instances.
+    fn emit_fb_initializer(&mut self, fb: &FunctionBlockDecl) -> CgResult<()> {
+        let function = self.fb_initializers[&fb.name];
+        let layout = self.fb_layouts[&fb.name].clone();
+
+        self.current_fn = Some(function);
+        self.variables.clear();
+
+        let entry = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry);
+
+        let self_ptr = function
+            .get_first_param()
+            .expect("function block initialiser takes an instance pointer")
+            .into_pointer_value();
+        self.bind_fb_fields(&layout, self_ptr)?;
+
+        for field in &layout.fields {
+            let slot = self.variables[&field.name].clone();
+            let value = match &field.initial_value {
+                Some(expr) => {
+                    let raw = self.emit_expression(expr)?;
+                    self.coerce_value(raw, &field.resolved_type)
+                }
+                None => self.zero_value(&field.resolved_type),
+            };
+            self.builder.build_store(slot.ptr, value).unwrap();
+        }
+
+        self.builder.build_return(None).unwrap();
+        self.current_fn = None;
+        Ok(())
+    }
+
+    /// Emits the call that initialises one function block instance.
+    fn emit_fb_init_call(&mut self, fb_name: &str, instance_ptr: PointerValue<'ctx>) {
+        if let Some(init_fn) = self.fb_initializers.get(fb_name).copied() {
+            self.builder
+                .build_call(init_fn, &[instance_ptr.into()], "")
+                .unwrap();
+        }
+    }
+
+    /// Returns the function block layout for a slot holding an instance.
+    fn instance_layout(&self, slot: &VarSlot<'ctx>) -> Option<(String, FbLayout<'ctx>)> {
+        match &slot.resolved_type {
+            ResolvedType::UserDefined { name } => self
+                .fb_layouts
+                .get(name)
+                .map(|layout| (name.clone(), layout.clone())),
+            _ => None,
+        }
     }
 
     /// Emits the body of a POU.
@@ -391,13 +657,23 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
             Pou::FunctionBlock(fb) => {
                 let function = self.functions[&fb.name];
+                let layout = self.fb_layouts[&fb.name].clone();
+
                 self.current_fn = Some(function);
                 self.variables.clear();
 
                 let entry = self.context.append_basic_block(function, "entry");
                 self.builder.position_at_end(entry);
 
-                self.emit_var_blocks(&fb.var_blocks)?;
+                // No allocas here: the block's variables *are* the
+                // caller's instance fields, which is how a TON keeps
+                // counting across scan cycles.
+                let self_ptr = function
+                    .get_first_param()
+                    .expect("function block takes an instance pointer")
+                    .into_pointer_value();
+                self.bind_fb_fields(&layout, self_ptr)?;
+
                 self.emit_statements(&fb.body)?;
 
                 if self.needs_terminator() {
@@ -405,6 +681,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
 
                 self.current_fn = None;
+
+                self.emit_fb_initializer(fb)?;
             }
         }
         Ok(())
@@ -448,6 +726,24 @@ impl<'ctx> CodeGenerator<'ctx> {
         let lt = self.llvm_type(&rt);
         let ptr = self.builder.build_alloca(lt, &decl.name).unwrap();
 
+        // A function block instance is initialised by its own generated
+        // initialiser, which knows the struct's field defaults.
+        if let ResolvedType::UserDefined { name: fb_name } = &rt {
+            if self.fb_layouts.contains_key(fb_name) {
+                let fb_name = fb_name.clone();
+                self.emit_fb_init_call(&fb_name, ptr);
+                self.variables.insert(
+                    decl.name.clone(),
+                    VarSlot {
+                        ptr,
+                        resolved_type: rt,
+                        llvm_type: lt,
+                    },
+                );
+                return Ok(());
+            }
+        }
+
         // Store initial value if present
         if let Some(ref init_expr) = decl.initial_value {
             let init_val = self.emit_expression(init_expr)?;
@@ -488,7 +784,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             ResolvedType::Time | ResolvedType::Date | ResolvedType::Tod | ResolvedType::Dt => {
                 self.context.i64_type().const_zero().into()
             }
-            ResolvedType::Array { .. } | ResolvedType::Str { .. } | ResolvedType::WStr { .. } => {
+            ResolvedType::Array { .. }
+            | ResolvedType::Str { .. }
+            | ResolvedType::WStr { .. }
+            | ResolvedType::UserDefined { .. } => {
                 let ty = self.llvm_type(rt);
                 ty.const_zero()
             }
@@ -599,10 +898,62 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.builder.build_store(ptr, rhs).unwrap();
                 Ok(())
             }
+            Expression::MemberAccess { object, member, .. } => {
+                let (ptr, field_type) = self.emit_member_gep(object, member)?;
+                let coerced = self.coerce_value(rhs, &field_type);
+                self.builder.build_store(ptr, coerced).unwrap();
+                Ok(())
+            }
             _ => Err(CodegenError {
                 message: "unsupported assignment target".to_string(),
             }),
         }
+    }
+
+    // ── Function block member access ────────────────────────────
+
+    /// Computes a pointer to `instance.member`, returning it with the
+    /// field's resolved type.
+    fn emit_member_gep(
+        &mut self,
+        object: &Expression,
+        member: &str,
+    ) -> CgResult<(PointerValue<'ctx>, ResolvedType)> {
+        let Expression::Identifier { name, .. } = object else {
+            return Err(CodegenError {
+                message: "only function block instances support member access".to_string(),
+            });
+        };
+
+        let slot = self
+            .variables
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CodegenError {
+                message: format!("undefined variable '{}'", name),
+            })?;
+
+        let (fb_name, layout) = self.instance_layout(&slot).ok_or_else(|| CodegenError {
+            message: format!("'{}' is not a function block instance", name),
+        })?;
+
+        let field = layout.field(member).ok_or_else(|| CodegenError {
+            message: format!("function block {} has no member '{}'", fb_name, member),
+        })?;
+
+        let ptr = self
+            .builder
+            .build_struct_gep(
+                layout.struct_type,
+                slot.ptr,
+                field.index,
+                &format!("{}.{}", name, field.name),
+            )
+            .map_err(|e| CodegenError {
+                message: format!("cannot address '{}.{}': {}", name, member, e),
+            })?;
+
+        Ok((ptr, field.resolved_type.clone()))
     }
 
     // ── IF statement ────────────────────────────────────────────
@@ -968,11 +1319,18 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // String literals as global constants — simplified for now
                 Ok(self.context.i32_type().const_zero().into())
             }
-            Expression::TimeLiteral { .. }
-            | Expression::DateLiteral { .. }
+            Expression::TimeLiteral { text, .. } => {
+                // TIME is an i64 millisecond count — see `stdlib`.
+                let ms = stdlib::parse_time_literal(text).ok_or_else(|| CodegenError {
+                    message: format!("malformed duration literal '{}'", text),
+                })?;
+                Ok(self.context.i64_type().const_int(ms as u64, true).into())
+            }
+
+            Expression::DateLiteral { .. }
             | Expression::TodLiteral { .. }
             | Expression::DtLiteral { .. } => {
-                // Temporal literals — placeholder as i64 zero
+                // Calendar literals — placeholder as i64 zero
                 Ok(self.context.i64_type().const_zero().into())
             }
 
@@ -1014,9 +1372,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                 Ok(val)
             }
 
-            Expression::MemberAccess { .. } => {
-                // Placeholder for FB member access
-                Ok(self.context.i32_type().const_zero().into())
+            Expression::MemberAccess { object, member, .. } => {
+                let (ptr, field_type) = self.emit_member_gep(object, member)?;
+                let llvm_type = self.llvm_type(&field_type);
+                let val = self.builder.build_load(llvm_type, ptr, member).unwrap();
+                Ok(val)
             }
         }
     }
@@ -1241,6 +1601,20 @@ impl<'ctx> CodeGenerator<'ctx> {
     // ── Function calls ──────────────────────────────────────────
 
     fn emit_call(&mut self, name: &str, args: &[CallArg]) -> CgResult<BasicValueEnum<'ctx>> {
+        // The scan-clock intrinsic reads the runtime's millisecond
+        // counter; it has no ST body to call.
+        if name.eq_ignore_ascii_case(stdlib::TIME_MS_INTRINSIC) {
+            return self.emit_time_ms();
+        }
+
+        // `inst(IN := x, Q => y);` — the callee names a variable holding
+        // a function block instance, not a function.
+        if let Some(slot) = self.variables.get(name).cloned() {
+            if let Some((fb_name, layout)) = self.instance_layout(&slot) {
+                return self.emit_fb_invoke(name, &fb_name, &layout, slot.ptr, args);
+            }
+        }
+
         let function = self
             .functions
             .get(name)
@@ -1275,6 +1649,190 @@ impl<'ctx> CodeGenerator<'ctx> {
             Some(val) => Ok(val),
             None => Ok(self.context.i32_type().const_zero().into()),
         }
+    }
+
+    // ── Function block invocation ───────────────────────────────
+
+    /// Emits a call on a function block instance.
+    ///
+    /// Three steps, in the order IEC 61131-3 requires: copy the bound
+    /// inputs into the instance struct, run the block body against that
+    /// struct, then copy any `=>` outputs back out. Outputs read later
+    /// as `inst.Q` need no copy-back — they are already in the struct.
+    fn emit_fb_invoke(
+        &mut self,
+        instance: &str,
+        fb_name: &str,
+        layout: &FbLayout<'ctx>,
+        instance_ptr: PointerValue<'ctx>,
+        args: &[CallArg],
+    ) -> CgResult<BasicValueEnum<'ctx>> {
+        let inputs: Vec<FbField> = layout.inputs().cloned().collect();
+        let mut positional = 0usize;
+
+        for arg in args {
+            let (field, value_expr) = match arg {
+                CallArg::Positional(expr) => {
+                    let field = inputs.get(positional).cloned().ok_or_else(|| CodegenError {
+                        message: format!(
+                            "'{}' ({}) takes {} input(s), but more were given",
+                            instance,
+                            fb_name,
+                            inputs.len()
+                        ),
+                    })?;
+                    positional += 1;
+                    (field, expr)
+                }
+                CallArg::Named { name, value } => {
+                    let field = layout.field(name).cloned().ok_or_else(|| CodegenError {
+                        message: format!("function block {} has no input '{}'", fb_name, name),
+                    })?;
+                    (field, value)
+                }
+                // Outputs are copied back after the body runs.
+                CallArg::Output { .. } => continue,
+            };
+
+            let value = self.emit_expression(value_expr)?;
+            let coerced = self.coerce_value(value, &field.resolved_type);
+            let ptr = self.fb_field_ptr(layout, instance_ptr, &field, instance)?;
+            self.builder.build_store(ptr, coerced).unwrap();
+        }
+
+        let function = self
+            .functions
+            .get(fb_name)
+            .copied()
+            .ok_or_else(|| CodegenError {
+                message: format!("function block '{}' was never declared", fb_name),
+            })?;
+        self.builder
+            .build_call(function, &[instance_ptr.into()], "")
+            .unwrap();
+
+        for arg in args {
+            let CallArg::Output { name, target } = arg else {
+                continue;
+            };
+            let field = layout.field(name).cloned().ok_or_else(|| CodegenError {
+                message: format!("function block {} has no output '{}'", fb_name, name),
+            })?;
+            let ptr = self.fb_field_ptr(layout, instance_ptr, &field, instance)?;
+            let llvm_type = self.llvm_type(&field.resolved_type);
+            let value = self.builder.build_load(llvm_type, ptr, &field.name).unwrap();
+            self.emit_store_to_target(target, value)?;
+        }
+
+        // An FB call is a statement, not an expression — nothing to yield.
+        Ok(self.context.bool_type().const_zero().into())
+    }
+
+    /// Computes a pointer to one field of a function block instance.
+    fn fb_field_ptr(
+        &self,
+        layout: &FbLayout<'ctx>,
+        instance_ptr: PointerValue<'ctx>,
+        field: &FbField,
+        instance: &str,
+    ) -> CgResult<PointerValue<'ctx>> {
+        self.builder
+            .build_struct_gep(
+                layout.struct_type,
+                instance_ptr,
+                field.index,
+                &format!("{}.{}", instance, field.name),
+            )
+            .map_err(|e| CodegenError {
+                message: format!("cannot address '{}.{}': {}", instance, field.name, e),
+            })
+    }
+
+    /// Stores an already-evaluated value into an assignment target.
+    fn emit_store_to_target(
+        &mut self,
+        target: &Expression,
+        value: BasicValueEnum<'ctx>,
+    ) -> CgResult<()> {
+        match target {
+            Expression::Identifier { name, .. } => {
+                let slot = self
+                    .variables
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| CodegenError {
+                        message: format!("undefined variable '{}'", name),
+                    })?;
+                let coerced = self.coerce_value(value, &slot.resolved_type);
+                self.builder.build_store(slot.ptr, coerced).unwrap();
+                Ok(())
+            }
+            Expression::ArrayAccess { array, indices, .. } => {
+                let ptr = self.emit_array_gep(array, indices)?;
+                self.builder.build_store(ptr, value).unwrap();
+                Ok(())
+            }
+            Expression::MemberAccess { object, member, .. } => {
+                let (ptr, field_type) = self.emit_member_gep(object, member)?;
+                let coerced = self.coerce_value(value, &field_type);
+                self.builder.build_store(ptr, coerced).unwrap();
+                Ok(())
+            }
+            _ => Err(CodegenError {
+                message: "unsupported output assignment target".to_string(),
+            }),
+        }
+    }
+
+    // ── Scan clock intrinsic ────────────────────────────────────
+
+    /// Emits `TIME_MS()` — a load of the runtime's scan clock.
+    fn emit_time_ms(&mut self) -> CgResult<BasicValueEnum<'ctx>> {
+        let global = self.ensure_time_support();
+        let value = self
+            .builder
+            .build_load(self.context.i64_type(), global, "now_ms")
+            .unwrap();
+        Ok(value)
+    }
+
+    /// Creates the scan clock global and its host-facing setter, once
+    /// per module, and returns a pointer to the global.
+    ///
+    /// Emitted lazily: a program with no timers gets neither symbol.
+    fn ensure_time_support(&mut self) -> PointerValue<'ctx> {
+        if let Some(global) = self.module.get_global(TIME_GLOBAL) {
+            return global.as_pointer_value();
+        }
+
+        let i64_type = self.context.i64_type();
+        let global = self.module.add_global(i64_type, None, TIME_GLOBAL);
+        global.set_initializer(&i64_type.const_zero());
+
+        // The setter gets its own block, so remember where the caller
+        // was building and go back there afterwards.
+        let resume = self.builder.get_insert_block();
+
+        let setter_type = self
+            .context
+            .void_type()
+            .fn_type(&[i64_type.into()], false);
+        let setter = self.module.add_function(TIME_SETTER_FN, setter_type, None);
+        let entry = self.context.append_basic_block(setter, "entry");
+        self.builder.position_at_end(entry);
+        let millis = setter
+            .get_first_param()
+            .expect("scan clock setter takes one parameter");
+        self.builder
+            .build_store(global.as_pointer_value(), millis)
+            .unwrap();
+        self.builder.build_return(None).unwrap();
+
+        if let Some(block) = resume {
+            self.builder.position_at_end(block);
+        }
+
+        global.as_pointer_value()
     }
 
     // ── Array access ────────────────────────────────────────────
@@ -1448,7 +2006,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
 
-        if val.is_int_value() && (target.is_integer() || *target == ResolvedType::Bool) {
+        // Temporal types are i64 counts, so an integer flows into them
+        // the same way it flows into any other integer slot.
+        if val.is_int_value()
+            && (target.is_integer() || target.is_temporal() || *target == ResolvedType::Bool)
+        {
             let iv = val.into_int_value();
             if let BasicTypeEnum::IntType(it) = target_llvm {
                 if iv.get_type().get_bit_width() != it.get_bit_width() {
@@ -1480,11 +2042,19 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// variables, which the runtime uses to call the getter functions
     /// and display values.
     pub fn compile_for_runtime(&mut self, unit: &CompilationUnit) -> CgResult<Vec<RuntimeVar>> {
+        // Standard function blocks the program instantiates are compiled
+        // alongside it — see `stdlib::inject`.
+        let unit = stdlib::inject(unit);
         let mut runtime_vars = Vec::new();
 
-        // Pass 1: Declare all FUNCTION signatures so they can be called
+        // Pass 0: name FB instance structs before laying any of them out.
+        self.predeclare_fb_types(&unit);
+
+        // Pass 1: Declare FUNCTION and FUNCTION_BLOCK signatures so they
+        // can be called, and so instance layouts are known before the
+        // PROGRAM allocates its globals.
         for pou in &unit.units {
-            if let Pou::Function(_) = pou {
+            if matches!(pou, Pou::Function(_) | Pou::FunctionBlock(_)) {
                 self.declare_pou(pou)?;
             }
         }
@@ -1497,9 +2067,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             }
         }
 
-        // Pass 3: Emit FUNCTION bodies (they use normal allocas — stateless)
+        // Pass 3: Emit FUNCTION bodies (they use normal allocas —
+        // stateless) and FUNCTION_BLOCK bodies (state is the caller's).
         for pou in &unit.units {
-            if let Pou::Function(_) = pou {
+            if matches!(pou, Pou::Function(_) | Pou::FunctionBlock(_)) {
                 self.emit_pou(pou)?;
             }
         }
@@ -1510,7 +2081,11 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// Compiles a single PROGRAM for runtime execution.
     fn compile_program_for_runtime(&mut self, p: &ProgramDecl) -> CgResult<Vec<RuntimeVar>> {
         self.variables.clear();
-        let mut runtime_vars = Vec::new();
+        // Each exposed variable is carried with the storage its accessors
+        // will address, so the two can never drift apart.
+        let mut exposed: Vec<(RuntimeVar, RuntimeTarget<'ctx>)> = Vec::new();
+        // Function block instances to initialise from __init_<Name>().
+        let mut instances: Vec<(String, PointerValue<'ctx>)> = Vec::new();
 
         // ── Step 1: Create LLVM globals for each variable ──
         for block in &p.var_blocks {
@@ -1522,25 +2097,60 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let global = self.module.add_global(lt, None, &global_name);
                 global.set_initializer(&lt.const_zero());
 
-                self.variables.insert(
-                    decl.name.clone(),
-                    VarSlot {
-                        ptr: global.as_pointer_value(),
-                        resolved_type: rt.clone(),
-                        llvm_type: lt,
-                    },
-                );
+                let slot = VarSlot {
+                    ptr: global.as_pointer_value(),
+                    resolved_type: rt.clone(),
+                    llvm_type: lt,
+                };
+                self.variables.insert(decl.name.clone(), slot.clone());
 
                 if Self::is_runtime_scalar(&rt) {
-                    runtime_vars.push(RuntimeVar {
-                        name: decl.name.clone(),
-                        resolved_type: rt,
-                        program_name: p.name.clone(),
-                        getter_fn_name: Self::runtime_accessor_name("get", &p.name, &decl.name),
-                        setter_fn_name: Some(Self::runtime_accessor_name(
-                            "set", &p.name, &decl.name,
-                        )),
-                    });
+                    exposed.push((
+                        RuntimeVar {
+                            name: decl.name.clone(),
+                            resolved_type: rt.clone(),
+                            program_name: p.name.clone(),
+                            getter_fn_name: Self::runtime_accessor_name("get", &p.name, &decl.name),
+                            setter_fn_name: Some(Self::runtime_accessor_name(
+                                "set", &p.name, &decl.name,
+                            )),
+                        },
+                        RuntimeTarget {
+                            base: slot.ptr,
+                            member: None,
+                            resolved_type: rt,
+                            llvm_type: lt,
+                        },
+                    ));
+                } else if let Some((fb_name, layout)) = self.instance_layout(&slot) {
+                    instances.push((fb_name, slot.ptr));
+
+                    // Expose the block's outputs — `t.Q`, `t.ET` — so the
+                    // dashboard and OPC UA server can watch timers and
+                    // counters. They are read-only: the scan cycle owns them.
+                    for field in layout.outputs() {
+                        if !Self::is_runtime_scalar(&field.resolved_type) {
+                            continue;
+                        }
+                        let accessor = format!("{}_{}", decl.name, field.name);
+                        exposed.push((
+                            RuntimeVar {
+                                name: format!("{}.{}", decl.name, field.name),
+                                resolved_type: field.resolved_type.clone(),
+                                program_name: p.name.clone(),
+                                getter_fn_name: Self::runtime_accessor_name(
+                                    "get", &p.name, &accessor,
+                                ),
+                                setter_fn_name: None,
+                            },
+                            RuntimeTarget {
+                                base: slot.ptr,
+                                member: Some((layout.struct_type, field.index)),
+                                resolved_type: field.resolved_type.clone(),
+                                llvm_type: self.llvm_type(&field.resolved_type),
+                            },
+                        ));
+                    }
                 }
             }
         }
@@ -1552,6 +2162,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(init_fn, "entry");
         self.builder.position_at_end(entry);
         self.current_fn = Some(init_fn);
+
+        for (fb_name, instance_ptr) in &instances {
+            self.emit_fb_init_call(fb_name, *instance_ptr);
+        }
 
         for block in &p.var_blocks {
             for decl in &block.declarations {
@@ -1581,15 +2195,15 @@ impl<'ctx> CodeGenerator<'ctx> {
         //
         // Each getter loads the global and converts to f64 so the
         // runtime can read all variables with one uniform type.
-        for var in &runtime_vars {
-            self.emit_runtime_getter(&var.name, &var.resolved_type, &var.getter_fn_name)?;
+        for (var, target) in &exposed {
+            self.emit_runtime_getter(target, &var.getter_fn_name)?;
             if let Some(setter_fn_name) = &var.setter_fn_name {
-                self.emit_runtime_setter(&var.name, &var.resolved_type, setter_fn_name)?;
+                self.emit_runtime_setter(target, setter_fn_name)?;
             }
         }
 
         self.current_fn = None;
-        Ok(runtime_vars)
+        Ok(exposed.into_iter().map(|(var, _)| var).collect())
     }
 
     fn runtime_accessor_name(kind: &str, program_name: &str, variable_name: &str) -> String {
@@ -1611,23 +2225,33 @@ impl<'ctx> CodeGenerator<'ctx> {
         )
     }
 
-    /// Emits a getter that reads a global and returns it as a double.
-    fn emit_runtime_getter(
-        &mut self,
-        name: &str,
-        rt: &ResolvedType,
-        fn_name: &str,
-    ) -> CgResult<()> {
+    /// Resolves a runtime target to a pointer in the current block,
+    /// stepping into the instance struct for function block members.
+    fn runtime_target_ptr(&self, target: &RuntimeTarget<'ctx>) -> CgResult<PointerValue<'ctx>> {
+        match target.member {
+            None => Ok(target.base),
+            Some((struct_type, index)) => self
+                .builder
+                .build_struct_gep(struct_type, target.base, index, "member")
+                .map_err(|e| CodegenError {
+                    message: format!("cannot address runtime member: {}", e),
+                }),
+        }
+    }
+
+    /// Emits a getter that reads a runtime value and returns it as a double.
+    fn emit_runtime_getter(&mut self, target: &RuntimeTarget<'ctx>, fn_name: &str) -> CgResult<()> {
+        let rt = &target.resolved_type;
         let f64_type = self.context.f64_type();
         let fn_type = f64_type.fn_type(&[], false);
         let function = self.module.add_function(fn_name, fn_type, None);
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
-        let slot = self.variables[name].clone();
+        let ptr = self.runtime_target_ptr(target)?;
         let raw = self
             .builder
-            .build_load(slot.llvm_type, slot.ptr, "val")
+            .build_load(target.llvm_type, ptr, "val")
             .unwrap();
 
         let as_f64 = match rt {
@@ -1662,20 +2286,16 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
 
-    /// Emits a setter that accepts an f64 and stores it in the global.
-    fn emit_runtime_setter(
-        &mut self,
-        name: &str,
-        rt: &ResolvedType,
-        fn_name: &str,
-    ) -> CgResult<()> {
+    /// Emits a setter that accepts an f64 and stores it in the target.
+    fn emit_runtime_setter(&mut self, target: &RuntimeTarget<'ctx>, fn_name: &str) -> CgResult<()> {
+        let rt = &target.resolved_type;
         let f64_type = self.context.f64_type();
         let fn_type = self.context.void_type().fn_type(&[f64_type.into()], false);
         let function = self.module.add_function(fn_name, fn_type, None);
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
-        let slot = self.variables[name].clone();
+        let ptr = self.runtime_target_ptr(target)?;
         let input = function
             .get_first_param()
             .expect("runtime setter has one parameter")
@@ -1717,7 +2337,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             _ => self.zero_value(rt),
         };
 
-        self.builder.build_store(slot.ptr, value).unwrap();
+        self.builder.build_store(ptr, value).unwrap();
         self.builder.build_return(None).unwrap();
         Ok(())
     }

@@ -144,7 +144,21 @@ END_FUNCTION_BLOCK
 "#,
     );
 
-    assert!(ir.contains("define void @PID()"), "Missing FB function");
+    // A function block takes a pointer to its instance struct — its
+    // variables live in the caller's memory so they survive scan cycles.
+    assert!(
+        ir.contains("define void @PID(ptr %self)"),
+        "Missing FB function taking an instance pointer"
+    );
+    assert!(
+        ir.contains("%FB.PID = type { float, float, float, float, float }"),
+        "Missing instance struct layout"
+    );
+    assert!(
+        ir.contains("define void @__fbinit_PID(ptr %self)"),
+        "Missing instance initialiser"
+    );
+    assert!(ir.contains("getelementptr"), "Missing field addressing");
     assert!(ir.contains("fsub"), "Missing float subtraction");
     assert!(ir.contains("fmul"), "Missing float multiplication");
 }

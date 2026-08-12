@@ -7,15 +7,21 @@
 //! code generation pipeline: **lexer** → **parser** → **semantic
 //! analysis** → **LLVM IR generation** via `inkwell`.
 //!
-//! The current completion sprint adds runtime-facing support modules:
-//! a typed process image, deterministic scan-cycle metrics, a flotation
-//! tank simulation harness, and an OPC UA address-space bridge scaffold.
+//! Runtime-facing support modules provide a typed process image,
+//! deterministic scan-cycle metrics, a flotation tank simulation
+//! harness, and an OPC UA address-space bridge scaffold.
+//!
+//! [`stdlib`] carries the IEC 61131-3 standard function blocks — the
+//! timers, counters, edge detectors and latches — written in Structured
+//! Text and compiled through this same pipeline. See `Developer_Guide.md`
+//! §13 for how function block instances are laid out and called.
 
 pub mod ast;
 pub mod codegen;
 pub mod lexer;
 pub mod parser;
 pub mod semantic;
+pub mod stdlib;
 
 pub mod opcua_bridge;
 pub mod process_image;

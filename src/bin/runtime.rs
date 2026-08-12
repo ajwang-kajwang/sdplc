@@ -34,6 +34,9 @@ use sdplc::timing::ScanTiming;
 type VoidFn = unsafe extern "C" fn();
 /// Getter function — returns a variable's value as f64.
 type GetterFn = unsafe extern "C" fn() -> f64;
+/// Scan clock setter — advances the compiled program's `TIME_MS()`
+/// source. Present only when the program uses timers.
+type SetTimeFn = unsafe extern "C" fn(i64);
 
 // ─── Main ───────────────────────────────────────────────────────
 
@@ -199,6 +202,11 @@ fn main() {
             process::exit(1);
         });
 
+    // Scan clock. Programs without timers never emit this symbol, so a
+    // missing lookup is normal rather than an error.
+    let set_time_fn: Option<JitFunction<SetTimeFn>> =
+        unsafe { execution_engine.get_function(sdplc::codegen::TIME_SETTER_FN) }.ok();
+
     // Build getter table
     let getters: Vec<(&RuntimeVar, JitFunction<GetterFn>)> = runtime_vars
         .iter()
@@ -216,6 +224,12 @@ fn main() {
     // ── Initialise ──
     unsafe {
         init_fn.call();
+    }
+    if !quiet {
+        match &set_time_fn {
+            Some(_) => println!("Clock:    ✓ scan clock bound (program uses timers)"),
+            None => println!("Clock:    – not needed (program has no timers)"),
+        }
     }
 
     let mut process_image = build_process_image(&getters);
@@ -242,6 +256,20 @@ fn main() {
         }
 
         let cycle_start = Instant::now();
+
+        // ── Publish this cycle's timestamp ──
+        //
+        // Sampled once, before the body runs, so every timer in the
+        // program sees the same instant — the same discipline a PLC
+        // applies to its process image. Timers therefore advance in
+        // whole scan cycles, which is what makes their behaviour
+        // reproducible from one run to the next.
+        if let Some(set_time) = &set_time_fn {
+            let now_ms = cycle_start.duration_since(runtime_start).as_millis() as i64;
+            unsafe {
+                set_time.call(now_ms);
+            }
+        }
 
         // ── Execute one scan cycle ──
         unsafe {

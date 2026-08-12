@@ -46,7 +46,8 @@ pub enum ResolvedType {
     Float { bits: u32 },
     /// A bit string (BYTE/WORD/DWORD/LWORD) — LLVM integer.
     BitString { bits: u32 },
-    /// A duration (TIME) — stored as i64 nanoseconds.
+    /// A duration (TIME) — stored as i64 milliseconds, matching the
+    /// resolution of the runtime scan clock read by `TIME_MS()`.
     Time,
     /// A date (DATE) — stored as i64 days since epoch.
     Date,
@@ -108,6 +109,12 @@ impl ResolvedType {
     /// Returns true if this type is signed.
     pub fn is_signed(&self) -> bool {
         matches!(self, Self::SignedInt { .. } | Self::Float { .. })
+    }
+
+    /// Returns true for the temporal types, all of which are stored as
+    /// signed 64-bit counts.
+    pub fn is_temporal(&self) -> bool {
+        matches!(self, Self::Time | Self::Date | Self::Tod | Self::Dt)
     }
 }
 
@@ -349,7 +356,13 @@ impl SemanticAnalyzer {
     /// Analyses a compilation unit and returns the program context.
     pub fn analyze(mut self, ast: CompilationUnit) -> ProgramContext {
         // First pass: register all POUs so forward references work.
-        for pou in &ast.units {
+        //
+        // The standard function blocks the program instantiates are
+        // registered alongside them — that is what makes `t : TON;`
+        // resolve and `t.Q` have a known type. Their bodies are not
+        // re-validated on every build; this module's tests cover them.
+        let with_library = crate::stdlib::inject(&ast);
+        for pou in &with_library.units {
             self.register_pou(pou);
         }
 
@@ -921,6 +934,16 @@ impl SemanticAnalyzer {
             | BinaryOperator::Mul
             | BinaryOperator::Div
             | BinaryOperator::Power => {
+                // Durations add and subtract like the integers they are
+                // stored as: TIME ± TIME → TIME, TIME ± integer → TIME.
+                if matches!(op, BinaryOperator::Add | BinaryOperator::Sub)
+                    && (*lt == ResolvedType::Time || *rt == ResolvedType::Time)
+                {
+                    let other = if *lt == ResolvedType::Time { rt } else { lt };
+                    if *other == ResolvedType::Time || other.is_integer() {
+                        return ResolvedType::Time;
+                    }
+                }
                 if !lt.is_numeric() || !rt.is_numeric() {
                     self.error(
                         span,
@@ -955,6 +978,13 @@ impl SemanticAnalyzer {
             | BinaryOperator::Ge => {
                 // Allow BOOL = BOOL comparison
                 if *lt == ResolvedType::Bool && *rt == ResolvedType::Bool {
+                    return ResolvedType::Bool;
+                }
+                // Durations compare against each other and against plain
+                // integer millisecond counts.
+                if (*lt == ResolvedType::Time && (*rt == ResolvedType::Time || rt.is_integer()))
+                    || (*rt == ResolvedType::Time && lt.is_integer())
+                {
                     return ResolvedType::Bool;
                 }
                 if !lt.is_numeric() || !rt.is_numeric() {
@@ -1072,17 +1102,169 @@ impl SemanticAnalyzer {
 
     // ── Call checking ───────────────────────────────────────────
 
-    fn check_call(&mut self, name: &str, _args: &[CallArg], span: &Span) -> ResolvedType {
-        if let Some(pou) = self.symbols.lookup_pou(name) {
+    fn check_call(&mut self, name: &str, args: &[CallArg], span: &Span) -> ResolvedType {
+        // The scan-clock intrinsic. It has no ST definition — codegen
+        // lowers it to a load of the runtime's millisecond counter.
+        if name.eq_ignore_ascii_case(crate::stdlib::TIME_MS_INTRINSIC) {
+            if !args.is_empty() {
+                self.error(
+                    span,
+                    format!("{}() takes no arguments", crate::stdlib::TIME_MS_INTRINSIC),
+                );
+            }
+            return ResolvedType::Time;
+        }
+
+        // `inst(IN := x, Q => y);` — invoking a function block instance.
+        // The callee name is a *variable*, so this check comes before the
+        // POU lookup below.
+        if let Some(sym) = self.symbols.lookup(name).cloned() {
+            if let ResolvedType::UserDefined { name: fb_name } = &sym.resolved_type {
+                match self.symbols.lookup_pou(fb_name).cloned() {
+                    Some(pou) if pou.kind == PouKind::FunctionBlock => {
+                        self.check_fb_invocation(name, fb_name, &pou, args, span);
+                    }
+                    _ => {
+                        self.error(
+                            span,
+                            format!(
+                                "'{}' is declared as '{}', which is not a known function block",
+                                name, fb_name
+                            ),
+                        );
+                    }
+                }
+                return ResolvedType::Bool;
+            }
+        }
+
+        if let Some(pou) = self.symbols.lookup_pou(name).cloned() {
+            self.check_call_arg_expressions(args);
             // Return the function's return type, or BOOL as default for FB/PROGRAM
-            pou.return_type.clone().unwrap_or(ResolvedType::Bool)
+            pou.return_type.unwrap_or(ResolvedType::Bool)
         } else {
             // Could be a built-in function — accept with a warning for now
+            self.check_call_arg_expressions(args);
             self.warning(
                 span,
                 format!("call to unknown function/FB '{}' — assuming valid", name),
             );
             ResolvedType::SignedInt { bits: 32 } // default return type
+        }
+    }
+
+    /// Type-checks the arguments of a function block instance call
+    /// against the block's declared VAR_INPUT / VAR_OUTPUT parameters.
+    ///
+    /// Inputs arrive as positional or `name := value` arguments; outputs
+    /// are extracted with `name => target`. Reading an output through
+    /// `inst.Q` afterwards is handled by member access instead, and is
+    /// the more common style.
+    fn check_fb_invocation(
+        &mut self,
+        instance: &str,
+        fb_name: &str,
+        pou: &PouInfo,
+        args: &[CallArg],
+        span: &Span,
+    ) {
+        let inputs: Vec<&(String, ResolvedType, VarQualifier)> = pou
+            .parameters
+            .iter()
+            .filter(|(_, _, q)| matches!(q, VarQualifier::VarInput | VarQualifier::VarInOut))
+            .collect();
+
+        let mut positional = 0usize;
+        for arg in args {
+            match arg {
+                CallArg::Positional(expr) => {
+                    let value_type = self.check_expression(expr);
+                    match inputs.get(positional) {
+                        Some((_, param_type, _)) => {
+                            if value_type != ResolvedType::Error {
+                                self.check_assignable(param_type, &value_type, span);
+                            }
+                        }
+                        None => self.error(
+                            span,
+                            format!(
+                                "'{}' ({}) takes {} input(s), but more were given",
+                                instance,
+                                fb_name,
+                                inputs.len()
+                            ),
+                        ),
+                    }
+                    positional += 1;
+                }
+
+                CallArg::Named { name, value } => {
+                    let value_type = self.check_expression(value);
+                    match Self::find_parameter(pou, name) {
+                        Some((_, param_type, VarQualifier::VarInput))
+                        | Some((_, param_type, VarQualifier::VarInOut)) => {
+                            if value_type != ResolvedType::Error {
+                                self.check_assignable(param_type, &value_type, span);
+                            }
+                        }
+                        Some((_, _, _)) => self.error(
+                            span,
+                            format!(
+                                "'{}' is an output of {} — read it as {}.{} or bind it with '=>'",
+                                name, fb_name, instance, name
+                            ),
+                        ),
+                        None => self.error(
+                            span,
+                            format!("{} has no input named '{}'", fb_name, name),
+                        ),
+                    }
+                }
+
+                CallArg::Output { name, target } => {
+                    let target_type = self.check_expression(target);
+                    match Self::find_parameter(pou, name) {
+                        Some((_, param_type, VarQualifier::VarOutput))
+                        | Some((_, param_type, VarQualifier::VarInOut)) => {
+                            if target_type != ResolvedType::Error {
+                                self.check_assignable(&target_type, param_type, span);
+                            }
+                        }
+                        Some((_, _, _)) => self.error(
+                            span,
+                            format!("'{}' is an input of {} — assign it with ':='", name, fb_name),
+                        ),
+                        None => self.error(
+                            span,
+                            format!("{} has no output named '{}'", fb_name, name),
+                        ),
+                    }
+                }
+            }
+        }
+    }
+
+    fn find_parameter<'p>(
+        pou: &'p PouInfo,
+        name: &str,
+    ) -> Option<&'p (String, ResolvedType, VarQualifier)> {
+        pou.parameters
+            .iter()
+            .find(|(param, _, _)| param.eq_ignore_ascii_case(name))
+    }
+
+    /// Type-checks argument expressions without binding them to
+    /// parameters — used for calls whose callee has no known signature.
+    fn check_call_arg_expressions(&mut self, args: &[CallArg]) {
+        for arg in args {
+            match arg {
+                CallArg::Positional(expr) | CallArg::Named { value: expr, .. } => {
+                    self.check_expression(expr);
+                }
+                CallArg::Output { target, .. } => {
+                    self.check_expression(target);
+                }
+            }
         }
     }
 }
